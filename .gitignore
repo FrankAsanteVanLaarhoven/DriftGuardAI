@@ -44,3 +44,4 @@ deploy/terraform/terraform.tfvars
 *.tfplan
 tf.plan
 crash.log
+artifacts/primary_transformer.joblib
