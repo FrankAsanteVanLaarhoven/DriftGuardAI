@@ -1,0 +1,68 @@
+{
+  "seeds": 5,
+  "window": 600,
+  "mean_detection_rate_on_drift": 0.8,
+  "false_positive_rate_no_drift": 0.0,
+  "rows": [
+    {
+      "kind": "no_drift",
+      "is_drift": false,
+      "detection_rate": 0.0,
+      "mean_psi": 0.012953538580793785,
+      "mean_domain_auc": 0.5215,
+      "fired_psi": 0,
+      "fired_domain": 0,
+      "n_seeds": 5
+    },
+    {
+      "kind": "length_truncate",
+      "is_drift": true,
+      "detection_rate": 1.0,
+      "mean_psi": 12.516948329215161,
+      "mean_domain_auc": 0.9735888888888888,
+      "fired_psi": 5,
+      "fired_domain": 5,
+      "n_seeds": 5
+    },
+    {
+      "kind": "class_prior_shift",
+      "is_drift": true,
+      "detection_rate": 1.0,
+      "mean_psi": 0.05351826025399518,
+      "mean_domain_auc": 0.7958833333333334,
+      "fired_psi": 0,
+      "fired_domain": 5,
+      "n_seeds": 5
+    },
+    {
+      "kind": "adjective_swap",
+      "is_drift": true,
+      "detection_rate": 1.0,
+      "mean_psi": 0.012953538580793785,
+      "mean_domain_auc": 0.9978277777777778,
+      "fired_psi": 0,
+      "fired_domain": 5,
+      "n_seeds": 5
+    },
+    {
+      "kind": "semantic_replace",
+      "is_drift": true,
+      "detection_rate": 1.0,
+      "mean_psi": 0.012953538580793785,
+      "mean_domain_auc": 1.0,
+      "fired_psi": 0,
+      "fired_domain": 5,
+      "n_seeds": 5
+    },
+    {
+      "kind": "gradual_topic",
+      "is_drift": true,
+      "detection_rate": 0.0,
+      "mean_psi": 0.012953538580793785,
+      "mean_domain_auc": 0.7181916666666667,
+      "fired_psi": 0,
+      "fired_domain": 0,
+      "n_seeds": 5
+    }
+  ]
+}

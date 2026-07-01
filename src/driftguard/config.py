@@ -60,6 +60,14 @@ class Settings(BaseSettings):
     # `make train` promotes a passing candidate automatically. The drift pipeline
     # turns this off so promotion waits behind the human gate.
     auto_promote: bool = True
+    # How the evaluative gate scores a candidate under drift:
+    #   "fixed"     — vs baseline on the frozen holdout (default; safe in stable regimes)
+    #   "refreshed" — vs baseline on a current-distribution (labelled) holdout
+    #   "dual"      — must beat baseline on the refreshed holdout AND not drop more than
+    #                 `gate_regression_floor` on the fixed holdout (no catastrophic
+    #                 forgetting). This resolves the concept-drift recovery block.
+    gate_holdout_mode: str = "fixed"
+    gate_regression_floor: float = 0.05
 
     # Drift detection
     psi_threshold: float = 0.2  # >0.2 = action per common PSI convention

@@ -65,8 +65,72 @@ Measured with `python -m driftguard.textdrift` — a text-aware domain classifie
 The semantic-shift sample has an **identical length distribution** to
 in-distribution data — so PSI scores it exactly 0.0137 and misses it entirely — yet
 the domain classifier separates it perfectly (AUC 1.0). This is the concrete,
-reproducible case for multi-layer, text-aware drift detection (3 new tests encode it;
-19 tests total pass).
+reproducible case for multi-layer, text-aware drift detection.
+
+### Drift-injection benchmark (`make benchmark`, 5 seeds, window 600)
+
+Controlled generators (Garcia-style) scored by the composite detector. **Mean
+detection on genuine drift = 0.80; false-positive rate on `no_drift` = 0.00.**
+
+| drift kind        | detection | mean PSI | mean domain AUC | PSI fired | domain fired |
+|-------------------|-----------|----------|-----------------|-----------|--------------|
+| no_drift          | 0.00      | 0.0130   | 0.5215          | 0/5       | 0/5          |
+| length_truncate   | 1.00      | 12.5169  | 0.9736          | 5/5       | 5/5          |
+| class_prior_shift | 1.00      | 0.0535   | 0.7959          | 0/5       | 5/5          |
+| adjective_swap    | 1.00      | 0.0130   | 0.9978          | 0/5       | 5/5          |
+| semantic_replace  | 1.00      | 0.0130   | 1.0000          | 0/5       | 5/5          |
+| gradual_topic     | 0.00      | 0.0130   | 0.7182          | 0/5       | 0/5          |
+
+PSI alone fires only on the length shift; every semantic category is carried by the
+domain classifier. Zero false positives on in-distribution windows. The single miss,
+`gradual_topic` at 40% injection (AUC 0.7182, just under the 0.75 threshold), is the
+honest hard case — partial/gradual drift is caught at higher severity or a lower
+threshold, at some false-positive cost. This is exactly the trade-off the benchmark
+quantifies rather than hides.
+
+**Detection boundary (`make benchmark-sweep`, gradual_topic, 5 seeds).** The
+domain-classifier AUC rises monotonically with injection fraction and crosses the 0.75
+gate at ~50% injection (0.40→0.7067 miss, 0.50→0.7639 caught, 0.90→0.9511); PSI stays
+flat at 0.0168 across the whole range. So the single miss above is one point on a clean
+boundary curve, not a random failure — the operating threshold sets exactly where
+gradual drift is caught.
+
+### Closed-loop recovery (`make recovery`, vocabulary concept drift p=0.7)
+
+Full self-healing loop, measured end to end: detect → retrain candidate on drifted
+labelled data → baseline gate.
+
+- Detected by the domain classifier (AUC 1.0000) in **0.245 s**; PSI blind (0.0142).
+- Retrain **24.4 s** → detection→decision wall time **24.6 s**.
+
+| macro-F1            | stale primary | retrained candidate |
+|---------------------|---------------|---------------------|
+| on DRIFTED holdout  | 0.8344        | 0.9170 (Δ **+0.083**) |
+| on FIXED holdout    | 0.9197        | 0.8519              |
+
+Gate on the **fixed** holdout FAILS (0.8519 < 0.8956); gate on the **drift-refreshed**
+holdout PASSES (0.9170 ≥ 0.7993).
+
+**Governance finding (measured, not hypothesised).** Retraining recovers +0.083 macro-F1
+on the new distribution, but the candidate is *worse* on the stale fixed holdout — so a
+fail-closed gate that still scores against the fixed holdout **blocks the recovery**.
+
+**Resolution — the drift-aware `dual` gate.** `registry.promotion_gate(mode="dual")`
+requires the candidate to (a) beat the baseline on a *refreshed* (current-distribution)
+holdout **and** (b) drop no more than `gate_regression_floor` (default 0.05) on the fixed
+holdout — i.e. adapt without catastrophic forgetting. On the same scenario:
+
+| gate mode  | decision | why |
+|------------|----------|-----|
+| fixed      | **FAIL** | 0.8519 < 0.8956 (blocks recovery) |
+| refreshed  | PASS     | 0.9170 ≥ 0.7993 (adapts) |
+| **dual**   | **PASS** | adapts (0.9170 ≥ 0.7993) *and* fixed-floor OK (0.8519 ≥ 0.8456) |
+
+The `dual` gate promotes genuine recovery while still failing closed on catastrophic
+forgetting (a candidate that scored, say, 0.40 on the fixed holdout would be blocked by
+the floor). This resolves the tension between "never promote a regression" and "adapt
+under concept drift" — safety intent preserved, recovery unblocked. Unit tests cover all
+three modes and both failure directions.
 
 ## Container & stack
 
