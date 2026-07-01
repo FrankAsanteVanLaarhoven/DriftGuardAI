@@ -56,6 +56,27 @@ Installs, trains, runs the full test suite (including the fallback chaos test),
 serves predictions, **removes the primary and shows the service stay up on the
 baseline (HTTP 200)**, then flags drift on a shifted sample.
 
+## Reproducible research demo (educational companion)
+
+A self-contained Jupyter notebook — `notebooks/ag_news_drift_demo.ipynb` — demonstrates
+the core hypotheses with controlled drift experiments on real `fancyzhx/ag_news` data:
+
+- **H1** — uncertainty-aware fallback for graceful degradation
+- **H2** — multi-layer text-aware drift detection (the domain classifier catches what PSI misses)
+- **H3** — the closed self-healing loop (detect → retrain → baseline gate → promote)
+
+**Quick start:** open it in **Colab** or **Kaggle** (CPU-only, ~2 min), or locally:
+
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install datasets scikit-learn scipy pandas matplotlib jupyter
+jupyter lab notebooks/ag_news_drift_demo.ipynb
+```
+
+All numbers are generated at runtime from a fixed seed (`SEED=42`), including the honest
+failure cases (e.g. PSI blindness on semantic drift). It is the lightweight *research*
+companion to the production service in this repo.
+
 ## Docs & layout
 - `ARCHITECTURE.md` — the closed loop and the two-sense fallback contract.
 - `CASE_STUDY.md` — measured numbers (model quality, PSI, resilience, infra checks).
