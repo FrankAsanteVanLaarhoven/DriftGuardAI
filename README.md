@@ -61,6 +61,8 @@ baseline (HTTP 200)**, then flags drift on a shifted sample.
 - `CASE_STUDY.md` — measured numbers (model quality, PSI, resilience, infra checks).
 - `CLAUDE.md` — repository conventions and guardrails.
 - `deploy/terraform/README.md` — exact AWS `apply` + `kubeconfig` steps.
+- `docs/DISTILBERT.md` — GPU runbook for the DistilBERT primary (linear model as fallback).
+- `benchmarks/README.md` — drift-injection benchmark, severity sweep, and closed-loop recovery.
 
 ```
 src/driftguard/{config,data,train,gate,drift,registry,api/}  tests/  pipelines/
