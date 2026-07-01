@@ -1,0 +1,15 @@
+# DVC pipeline: reproducible, versioned processed data.
+# Run with:  uv run dvc repro
+stages:
+  process:
+    cmd: python -m driftguard.data
+    deps:
+      - src/driftguard/data.py
+      - src/driftguard/config.py
+    outs:
+      - data/train.parquet
+      - data/val.parquet
+      - data/test.parquet
+    metrics:
+      - data/manifest.json:
+          cache: false

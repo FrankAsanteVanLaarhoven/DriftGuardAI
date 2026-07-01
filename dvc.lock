@@ -1,0 +1,30 @@
+schema: '2.0'
+stages:
+  process:
+    cmd: python -m driftguard.data
+    deps:
+    - path: src/driftguard/config.py
+      hash: md5
+      md5: 1d779318da8a4493386eed409a8e590d
+      size: 2798
+    - path: src/driftguard/data.py
+      hash: md5
+      md5: 641a3fce09502bcbca1e3c88546ae155
+      size: 3904
+    outs:
+    - path: data/manifest.json
+      hash: md5
+      md5: 379bdf1927137ca4119b7b8818ebdfa5
+      size: 981
+    - path: data/test.parquet
+      hash: md5
+      md5: 868718087477f9c4c09029877c411a08
+      size: 1199003
+    - path: data/train.parquet
+      hash: md5
+      md5: 85a92263ea4978611154c141d84895a2
+      size: 17433040
+    - path: data/val.parquet
+      hash: md5
+      md5: 4adfc844ea0f1dcf26c23d7d8a1bb25f
+      size: 1940887

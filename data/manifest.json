@@ -1,0 +1,40 @@
+{
+  "max_train_rows": 0,
+  "seed": 42,
+  "splits": {
+    "test": {
+      "class_counts": {
+        "Business": 1900,
+        "Sci/Tech": 1900,
+        "Sports": 1900,
+        "World": 1900
+      },
+      "content_sha256": "9d5212b49b40b160fad029466b91674c8825c2db6f6050993fac617b11eb8eff",
+      "path": "data/test.parquet",
+      "rows": 7600
+    },
+    "train": {
+      "class_counts": {
+        "Business": 27000,
+        "Sci/Tech": 27000,
+        "Sports": 27000,
+        "World": 27000
+      },
+      "content_sha256": "38a2373e9395e57f47ebda5d38fabf493b9e107bb3038fea1368aac1259534a7",
+      "path": "data/train.parquet",
+      "rows": 108000
+    },
+    "val": {
+      "class_counts": {
+        "Business": 3000,
+        "Sci/Tech": 3000,
+        "Sports": 3000,
+        "World": 3000
+      },
+      "content_sha256": "e506a690e4eec640bf382dac05c254e68b571b2071e731e872f2d0619e73d1a4",
+      "path": "data/val.parquet",
+      "rows": 12000
+    }
+  },
+  "val_fraction": 0.1
+}
