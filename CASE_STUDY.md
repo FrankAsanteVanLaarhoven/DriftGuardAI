@@ -95,6 +95,29 @@ flat at 0.0168 across the whole range. So the single miss above is one point on 
 boundary curve, not a random failure — the operating threshold sets exactly where
 gradual drift is caught.
 
+### Closed-loop recovery (`make recovery`, vocabulary concept drift p=0.7)
+
+Full self-healing loop, measured end to end: detect → retrain candidate on drifted
+labelled data → baseline gate.
+
+- Detected by the domain classifier (AUC 1.0000) in **0.245 s**; PSI blind (0.0142).
+- Retrain **24.4 s** → detection→decision wall time **24.6 s**.
+
+| macro-F1            | stale primary | retrained candidate |
+|---------------------|---------------|---------------------|
+| on DRIFTED holdout  | 0.8344        | 0.9170 (Δ **+0.083**) |
+| on FIXED holdout    | 0.9197        | 0.8519              |
+
+Gate on the **fixed** holdout FAILS (0.8519 < 0.8956); gate on the **drift-refreshed**
+holdout PASSES (0.9170 ≥ 0.7993).
+
+**Governance finding (measured, not hypothesised).** Retraining recovers +0.083 macro-F1
+on the new distribution, but the candidate is *worse* on the stale fixed holdout — so a
+fail-closed gate that still scores against the fixed holdout **blocks the recovery**.
+Under concept drift the gate's holdout must be refreshed to the new distribution, or the
+safety mechanism prevents the very self-healing it is meant to protect. This is the most
+important limitation surfaced by the project and a concrete next design task.
+
 ## Container & stack
 
 - Multi-stage image builds and runs as **non-root (uid 10001)** with a **read-only

@@ -54,3 +54,15 @@ def test_severity_sweep_is_monotone_in_separability():
     aucs = [r["mean_domain_auc"] for r in result["rows"]]
     # Heavier topic injection must be at least as separable as light injection.
     assert aucs[-1] > aucs[0]
+
+
+def test_vocab_concept_drift_transform_is_deterministic():
+    from closed_loop import vocab_drift
+
+    text = "the central bank raised interest rates today"
+    a = vocab_drift(text, p=0.7)
+    b = vocab_drift(text, p=0.7)
+    assert a == b                      # deterministic (hash-based, no per-run salt)
+    assert len(a.split()) == len(text.split())
+    assert "_v2" in a                  # some tokens acquired the new surface form
+    assert vocab_drift(text, p=0.0) == text   # p=0 is a no-op

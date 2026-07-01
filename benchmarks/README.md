@@ -58,3 +58,27 @@ default threshold. PSI stays flat at 0.0168 across the whole sweep: token-count 
 structurally blind to topic injection that preserves length. Lowering the AUC gate
 shifts the boundary left (earlier detection) at a false-positive cost — a deliberate,
 now-quantified operating-point choice.
+
+## Closed-loop recovery (`make recovery`)
+
+`closed_loop.py` measures the full self-healing loop under a *vocabulary concept drift*
+(a fraction `p` of tokens acquire a new surface form): detect → retrain a candidate on
+the drifted labelled data → baseline gate. Measured run (p=0.7, window 600):
+
+- **Detected** by the domain classifier (AUC 1.0000) in **0.245 s**; PSI blind (0.0142).
+- Retrain **24.4 s** → detection→decision wall time **24.6 s**.
+
+| macro-F1            | stale primary | retrained candidate |
+|---------------------|---------------|---------------------|
+| on DRIFTED holdout  | 0.8344        | 0.9170 (Δ **+0.083**) |
+| on FIXED holdout    | 0.9197        | 0.8519              |
+
+- Gate on **FIXED** holdout: **FAIL** (0.8519 < 0.8956).
+- Gate on **drift-refreshed** holdout: **PASS** (0.9170 ≥ 0.7993).
+
+**Governance finding.** Retraining recovers accuracy on the new distribution
+(+0.083 macro-F1), but the candidate scores *worse* on the stale fixed holdout — so a
+gate that still evaluates on the fixed holdout **rejects the recovered model**. Under
+concept drift the evaluation holdout must be refreshed to the new distribution
+alongside the model, or fail-closed promotion will block legitimate recovery. This is a
+real limitation the loop makes measurable rather than hiding.
