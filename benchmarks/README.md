@@ -78,7 +78,15 @@ the drifted labelled data → baseline gate. Measured run (p=0.7, window 600):
 
 **Governance finding.** Retraining recovers accuracy on the new distribution
 (+0.083 macro-F1), but the candidate scores *worse* on the stale fixed holdout — so a
-gate that still evaluates on the fixed holdout **rejects the recovered model**. Under
-concept drift the evaluation holdout must be refreshed to the new distribution
-alongside the model, or fail-closed promotion will block legitimate recovery. This is a
-real limitation the loop makes measurable rather than hiding.
+gate that still evaluates on the fixed holdout **rejects the recovered model**.
+
+**Resolution — the drift-aware `dual` gate** (`DRIFTGUARD_GATE_HOLDOUT_MODE=dual`):
+
+| gate mode | decision |
+|-----------|----------|
+| fixed     | FAIL (0.8519 < 0.8956) |
+| refreshed | PASS (0.9170 ≥ 0.7993) |
+| **dual**  | **PASS** — adapts (0.9170 ≥ 0.7993) and clears the fixed-holdout forgetting floor (0.8519 ≥ 0.8956 − 0.05) |
+
+`dual` promotes genuine recovery yet still fails closed on catastrophic forgetting.
+Safety intent preserved, recovery unblocked.

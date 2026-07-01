@@ -7,9 +7,9 @@
   "domain_auc": 1.0,
   "psi": 0.014208340177638378,
   "timing_s": {
-    "detection": 0.245,
-    "retrain": 24.394,
-    "detection_to_decision": 24.639
+    "detection": 0.243,
+    "retrain": 22.154,
+    "detection_to_decision": 22.397
   },
   "macro_f1": {
     "stale_on_drift": 0.8344,
@@ -25,5 +25,10 @@
   "gate_refreshed_holdout": {
     "passed": true,
     "reason": "candidate macro-F1 0.9170 >= baseline 0.7993 + margin 0.0000 (= 0.7993)"
+  },
+  "gate_dual_drift_aware": {
+    "passed": true,
+    "reason": "refreshed 0.9170 >= 0.7993+0.0000; fixed-floor 0.8519 >= 0.8456 (baseline 0.8956 - floor 0.0500)",
+    "regression_floor": 0.05
   }
 }

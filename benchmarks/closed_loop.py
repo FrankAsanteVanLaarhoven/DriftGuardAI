@@ -90,6 +90,14 @@ def run(p: float = 0.7, window: int = 600, seed: int = 42) -> dict:
     # --- 4. gate on the stale fixed holdout vs a drift-refreshed holdout -----
     gate_fixed = registry.baseline_gate(cand_fixed_f1, base_fixed_f1, settings.promotion_margin)
     gate_refreshed = registry.baseline_gate(cand_drift_f1, base_drift_f1, settings.promotion_margin)
+    # Drift-aware "dual" gate: adapt to the new distribution AND don't catastrophically
+    # forget the old one. This is the safe resolution to the recovery block.
+    gate_dual = registry.promotion_gate(
+        candidate_fixed_f1=cand_fixed_f1, baseline_fixed_f1=base_fixed_f1,
+        candidate_refreshed_f1=cand_drift_f1, baseline_refreshed_f1=base_drift_f1,
+        margin=settings.promotion_margin, mode="dual",
+        regression_floor=settings.gate_regression_floor,
+    )
 
     return {
         "scenario": f"vocab_concept_drift(p={p})",
@@ -112,6 +120,8 @@ def run(p: float = 0.7, window: int = 600, seed: int = 42) -> dict:
         "gate_fixed_holdout": {"passed": gate_fixed.passed, "reason": gate_fixed.reason},
         "gate_refreshed_holdout": {"passed": gate_refreshed.passed,
                                    "reason": gate_refreshed.reason},
+        "gate_dual_drift_aware": {"passed": gate_dual.passed, "reason": gate_dual.reason,
+                                  "regression_floor": settings.gate_regression_floor},
     }
 
 
@@ -131,10 +141,12 @@ def to_markdown(r: dict) -> str:
         f"| on FIXED holdout       | {m['stale_on_fixed']:.4f}        | "
         f"{m['candidate_on_fixed']:.4f}              |",
         "",
-        f"Gate on FIXED holdout:     {'PASS' if r['gate_fixed_holdout']['passed'] else 'FAIL'}"
+        f"Gate FIXED holdout      : {'PASS' if r['gate_fixed_holdout']['passed'] else 'FAIL'}"
         f" — {r['gate_fixed_holdout']['reason']}",
-        f"Gate on REFRESHED holdout: {'PASS' if r['gate_refreshed_holdout']['passed'] else 'FAIL'}"
+        f"Gate REFRESHED holdout  : {'PASS' if r['gate_refreshed_holdout']['passed'] else 'FAIL'}"
         f" — {r['gate_refreshed_holdout']['reason']}",
+        f"Gate DUAL (drift-aware) : {'PASS' if r['gate_dual_drift_aware']['passed'] else 'FAIL'}"
+        f" — {r['gate_dual_drift_aware']['reason']}",
     ])
 
 

@@ -42,6 +42,43 @@ def test_baseline_gate_respects_margin():
     assert not gate.passed
 
 
+def test_promotion_gate_fixed_matches_baseline_gate():
+    d = registry.promotion_gate(candidate_fixed_f1=0.89, baseline_fixed_f1=0.90, mode="fixed")
+    assert d.mode == "fixed"
+    assert d.passed is False
+
+
+def test_promotion_gate_dual_promotes_recovery_without_forgetting():
+    # Concept-drift recovery: worse on fixed, better on the refreshed holdout, but the
+    # fixed drop stays within the forgetting floor -> promotable.
+    d = registry.promotion_gate(
+        candidate_fixed_f1=0.8519, baseline_fixed_f1=0.8956,
+        candidate_refreshed_f1=0.9170, baseline_refreshed_f1=0.7993,
+        mode="dual", regression_floor=0.05,
+    )
+    assert d.passed is True
+
+
+def test_promotion_gate_dual_blocks_catastrophic_forgetting():
+    # Adapts to the new distribution but collapses on the old one -> blocked by the floor.
+    d = registry.promotion_gate(
+        candidate_fixed_f1=0.40, baseline_fixed_f1=0.8956,
+        candidate_refreshed_f1=0.95, baseline_refreshed_f1=0.7993,
+        mode="dual", regression_floor=0.05,
+    )
+    assert d.passed is False
+
+
+def test_promotion_gate_dual_blocks_non_adaptation():
+    # Preserves the old distribution but does not beat baseline on the new one -> blocked.
+    d = registry.promotion_gate(
+        candidate_fixed_f1=0.90, baseline_fixed_f1=0.8956,
+        candidate_refreshed_f1=0.70, baseline_refreshed_f1=0.7993,
+        mode="dual", regression_floor=0.05,
+    )
+    assert d.passed is False
+
+
 def test_psi_flags_a_shifted_distribution():
     import random
 

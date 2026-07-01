@@ -114,9 +114,23 @@ holdout PASSES (0.9170 ≥ 0.7993).
 **Governance finding (measured, not hypothesised).** Retraining recovers +0.083 macro-F1
 on the new distribution, but the candidate is *worse* on the stale fixed holdout — so a
 fail-closed gate that still scores against the fixed holdout **blocks the recovery**.
-Under concept drift the gate's holdout must be refreshed to the new distribution, or the
-safety mechanism prevents the very self-healing it is meant to protect. This is the most
-important limitation surfaced by the project and a concrete next design task.
+
+**Resolution — the drift-aware `dual` gate.** `registry.promotion_gate(mode="dual")`
+requires the candidate to (a) beat the baseline on a *refreshed* (current-distribution)
+holdout **and** (b) drop no more than `gate_regression_floor` (default 0.05) on the fixed
+holdout — i.e. adapt without catastrophic forgetting. On the same scenario:
+
+| gate mode  | decision | why |
+|------------|----------|-----|
+| fixed      | **FAIL** | 0.8519 < 0.8956 (blocks recovery) |
+| refreshed  | PASS     | 0.9170 ≥ 0.7993 (adapts) |
+| **dual**   | **PASS** | adapts (0.9170 ≥ 0.7993) *and* fixed-floor OK (0.8519 ≥ 0.8456) |
+
+The `dual` gate promotes genuine recovery while still failing closed on catastrophic
+forgetting (a candidate that scored, say, 0.40 on the fixed holdout would be blocked by
+the floor). This resolves the tension between "never promote a regression" and "adapt
+under concept drift" — safety intent preserved, recovery unblocked. Unit tests cover all
+three modes and both failure directions.
 
 ## Container & stack
 

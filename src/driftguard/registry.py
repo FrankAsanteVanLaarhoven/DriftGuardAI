@@ -93,6 +93,57 @@ def baseline_gate(candidate_macro_f1: float, baseline_macro_f1: float,
     return GateResult(passed, candidate_macro_f1, baseline_macro_f1, margin, reason)
 
 
+@dataclass(frozen=True)
+class PromotionDecision:
+    passed: bool
+    mode: str
+    reason: str
+
+
+def promotion_gate(candidate_fixed_f1: float, baseline_fixed_f1: float,
+                   candidate_refreshed_f1: float | None = None,
+                   baseline_refreshed_f1: float | None = None,
+                   margin: float = 0.0, mode: str = "fixed",
+                   regression_floor: float = 0.05) -> PromotionDecision:
+    """Drift-aware promotion decision.
+
+    * ``fixed``     — the classic gate on the frozen holdout (unchanged behaviour).
+    * ``refreshed`` — beat the baseline on a current-distribution holdout.
+    * ``dual``      — adapt to the new distribution (beat baseline on the refreshed
+                      holdout by ``margin``) **and** avoid catastrophic forgetting (drop
+                      no more than ``regression_floor`` on the fixed holdout).
+
+    ``dual`` is the safe resolution to the concept-drift recovery block: it promotes
+    genuine recovery without letting the model forget the old distribution wholesale.
+    """
+    if mode == "fixed":
+        g = baseline_gate(candidate_fixed_f1, baseline_fixed_f1, margin)
+        return PromotionDecision(g.passed, mode, g.reason)
+
+    if candidate_refreshed_f1 is None or baseline_refreshed_f1 is None:
+        raise ValueError(f"mode={mode!r} needs candidate_refreshed_f1 and baseline_refreshed_f1")
+
+    if mode == "refreshed":
+        g = baseline_gate(candidate_refreshed_f1, baseline_refreshed_f1, margin)
+        return PromotionDecision(g.passed, mode, f"refreshed holdout — {g.reason}")
+
+    if mode == "dual":
+        adapts = candidate_refreshed_f1 >= baseline_refreshed_f1 + margin
+        floor_threshold = baseline_fixed_f1 - regression_floor
+        no_forget = candidate_fixed_f1 >= floor_threshold
+        passed = adapts and no_forget
+        reason = (
+            f"refreshed {candidate_refreshed_f1:.4f} {'>=' if adapts else '<'} "
+            f"{baseline_refreshed_f1:.4f}+{margin:.4f}; "
+            f"fixed-floor {candidate_fixed_f1:.4f} {'>=' if no_forget else '<'} "
+            f"{floor_threshold:.4f} (baseline {baseline_fixed_f1:.4f} - "
+            f"floor {regression_floor:.4f})"
+        )
+        return PromotionDecision(passed, mode, reason)
+
+    raise ValueError(f"unknown gate mode: {mode!r}")
+
+
 # --------------------------------------------------------------------------- #
 # Persistence
 # --------------------------------------------------------------------------- #
