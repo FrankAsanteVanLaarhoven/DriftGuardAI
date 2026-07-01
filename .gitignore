@@ -26,6 +26,8 @@ mlruns/
 data/*.parquet
 artifacts/primary.joblib
 artifacts/*.tmp
+models/primary_pointer
+artifacts/evidently.html
 
 # Node / editor
 node_modules/

@@ -49,9 +49,11 @@ class Settings(BaseSettings):
     mlflow_tracking_uri: str = f"sqlite:///{ROOT / 'mlflow.db'}"
     mlflow_experiment: str = "driftguard"
     registered_model_name: str = "driftguard"
-    # When set, the API loads the primary from the registry first, e.g.
-    # ``models:/driftguard/Production``. Falls back to the local pointer file.
-    primary_model_uri: str = "models:/driftguard/Production"
+    # When set to a ``models:/`` URI (e.g. ``models:/driftguard@production``) the API
+    # loads the primary from the MLflow registry first, then falls back to the local
+    # pointer file. Empty (the local/dev default) uses the pointer only, which keeps
+    # the demo and fallback test hermetic. Production sets this via env.
+    primary_model_uri: str = ""
 
     # Promotion / baseline gate
     promotion_margin: float = 0.0  # candidate macro-F1 must beat baseline by >= this
