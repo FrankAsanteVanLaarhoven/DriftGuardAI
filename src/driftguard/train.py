@@ -44,14 +44,30 @@ def _write_json(path, payload) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True))
 
 
+_FOREIGN_VOCAB = (
+    "lorem ipsum dolor sit amet consectetur adipiscing elit sed eiusmod tempor "
+    "incididunt labore dolore magna aliqua enim minim veniam quis nostrud"
+).split()
+
+
 def _demo_samples(settings: Settings, test_texts: list[str]) -> None:
-    """Write a non-shifted and a deliberately shifted sample for the drift demo."""
+    """Write demo samples for the drift monitors.
+
+    * current_baseline    — in-distribution (no drift)
+    * current_shifted     — token_count shift (PSI catches it)
+    * current_semantic    — SAME length distribution, disjoint vocabulary
+                            (PSI misses it; the domain-classifier detector catches it)
+    """
     rng = __import__("random").Random(settings.random_seed)
     sample = rng.sample(test_texts, k=min(1000, len(test_texts)))
     _write_json(settings.artifacts_dir / "current_baseline.json", sample)
-    # Collapse each document to its first 5 tokens → large token_count shift → high PSI.
+
     shifted = [" ".join(t.split()[:5]) for t in sample]
     _write_json(settings.artifacts_dir / "current_shifted.json", shifted)
+
+    semantic = [" ".join(rng.choice(_FOREIGN_VOCAB) for _ in range(len(t.split()) or 1))
+                for t in sample]
+    _write_json(settings.artifacts_dir / "current_semantic_shift.json", semantic)
 
 
 def _deployment_report(settings: Settings, base_m, prim_m, gate, mlflow_info) -> None:
@@ -113,6 +129,9 @@ def main() -> int:
         frames["train"]["label_name"].value_counts(normalize=True).round(4).to_dict()
     )
     _write_json(settings.reference_path, reference)
+    # Raw reference-text sample for the text-aware (domain-classifier) drift detector.
+    ref_rng = __import__("random").Random(settings.random_seed + 1)
+    _write_json(settings.reference_sample_path, ref_rng.sample(Xtr, k=min(1500, len(Xtr))))
     _demo_samples(settings, Xte)
 
     # --- MLflow tracking + registry ------------------------------------------

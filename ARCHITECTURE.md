@@ -58,7 +58,7 @@ service degrades to the fast classic model instead of going down.
 | Experiment/registry| MLflow (sqlite locally, server in-stack) |
 | Orchestration      | ZenML pipelines (optional extra)         |
 | Serving            | FastAPI + uvicorn                        |
-| Drift              | PSI (dependency-free) + Evidently option |
+| Drift              | PSI + domain-classifier (text-aware) + Evidently/embedding options |
 | Packaging          | multi-stage Docker, non-root, read-only  |
 | Infra              | Terraform (ECR, S3, VPC/EKS, IRSA, SM)   |
 | Config mgmt        | Ansible (VM path)                        |
@@ -73,10 +73,28 @@ or on-prem with only the Terraform provider changing.
 - **Model:** re-point the MLflow `production` alias to the previous version
   (`registry.promote_version`).
 
+## Drift detection is multi-layer
+
+Two complementary signals run over recent traffic (`src/driftguard/textdrift.py`):
+
+1. **PSI on `token_count`** — cheap, dependency-free covariate-shift proxy.
+2. **Domain-classifier** (Rabanser et al. 2019) — a TF-IDF classifier trained to
+   separate reference vs. current text; cross-validated ROC-AUC ≈ 0.5 means
+   indistinguishable, → 1.0 means drift. It reads the *words*, so it catches semantic
+   shift that PSI is blind to. An optional sentence-embedding MMD sits behind the
+   `embed` extra.
+
+The `composite_drift` verdict combines the signals by a configurable rule
+(`DRIFTGUARD_DRIFT_COMPOSITE_RULE=any|all`; default `any` = safety-first) and logs
+which detector fired with its score. Thresholds are configurable too
+(`DRIFTGUARD_PSI_THRESHOLD`, `DRIFTGUARD_DOMAIN_AUC_THRESHOLD`); the defaults reproduce
+the documented results. Measured: a semantic-shift sample with an identical length
+distribution scores PSI 0.0137 (PSI misses it) but domain-classifier AUC 1.0000
+(caught). See `CASE_STUDY.md`.
+
 ## Trade-offs / limitations
-- PSI over a `token_count` signal is a robust, cheap covariate-shift proxy but is not
-  sensitive to subtle *semantic* drift; the Evidently path and an embedding-based
-  monitor are the documented upgrades.
+- The domain classifier needs a reference *text* sample (`reference_sample.json`,
+  written at train time); embedding MMD needs the optional `embed` extra.
 - The human gate adds latency by design; staged/statistical canary analysis can
   reduce it later.
 - Full retrain on breach; continual-learning (LoRA/EWC) is a future option.

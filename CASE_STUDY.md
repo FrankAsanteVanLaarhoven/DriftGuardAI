@@ -51,6 +51,23 @@ Measured against the running service and in the test suite:
 The drift→retrain pipeline detected the shift, retrained a candidate, ran the
 fail-closed gate, held at the human gate, and only then promoted.
 
+### Multi-layer detection (PSI + domain-classifier)
+
+Measured with `python -m driftguard.textdrift` — a text-aware domain classifier
+(cross-validated ROC-AUC, threshold 0.75) run alongside PSI:
+
+| Sample                | PSI (token_count) | Domain-classifier AUC | Verdict |
+|-----------------------|-------------------|-----------------------|---------|
+| in-distribution       | 0.0137 (no)       | 0.4945 (no)           | no drift |
+| token shift           | 12.5169 (yes)     | 0.9836 (yes)          | drift (both) |
+| **semantic shift**    | **0.0137 (MISS)** | **1.0000 (CATCH)**    | drift via classifier only |
+
+The semantic-shift sample has an **identical length distribution** to
+in-distribution data — so PSI scores it exactly 0.0137 and misses it entirely — yet
+the domain classifier separates it perfectly (AUC 1.0). This is the concrete,
+reproducible case for multi-layer, text-aware drift detection (3 new tests encode it;
+19 tests total pass).
+
 ## Container & stack
 
 - Multi-stage image builds and runs as **non-root (uid 10001)** with a **read-only
