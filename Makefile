@@ -46,6 +46,9 @@ drift: ## Run the PSI drift check against a sample (non-zero exit on drift)
 gate: ## Baseline gate: fail (exit 1) if the candidate regresses vs baseline
 	uv run python -m driftguard.gate
 
+drift-text: ## Text-aware composite drift (PSI + domain-classifier) on a sample
+	uv run python -m driftguard.textdrift artifacts/current_shifted.json
+
 docker: ## Build the production image
 	docker build -t $(IMAGE) .
 

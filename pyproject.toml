@@ -30,11 +30,13 @@ dependencies = [
 # stays fast and reliably lockable. The default primary model is scikit-learn.
 mlops = ["evidently>=0.4", "zenml>=0.60"]
 transformer = ["transformers>=4.42", "torch>=2.3"]
+embed = ["sentence-transformers>=3.0"]
 dev = ["pytest>=8.2", "ruff>=0.5", "pre-commit>=3.7"]
 
 [project.scripts]
 driftguard-train = "driftguard.train:main"
 driftguard-drift = "driftguard.drift:main"
+driftguard-textdrift = "driftguard.textdrift:main"
 driftguard-gate = "driftguard.gate:main"
 
 [build-system]

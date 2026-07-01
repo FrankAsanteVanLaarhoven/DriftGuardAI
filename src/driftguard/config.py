@@ -64,6 +64,10 @@ class Settings(BaseSettings):
     # Drift detection
     psi_threshold: float = 0.2  # >0.2 = action per common PSI convention
     psi_bins: int = 10
+    # Text-aware (domain-classifier) drift: reference-vs-current separability AUC.
+    # 0.5 = indistinguishable (no drift); -> 1.0 = strongly separable (drift).
+    domain_auc_threshold: float = 0.75
+    embed_model: str = "sentence-transformers/all-MiniLM-L6-v2"
 
     @property
     def metrics_path(self) -> Path:
@@ -76,6 +80,11 @@ class Settings(BaseSettings):
     @property
     def reference_path(self) -> Path:
         return self.artifacts_dir / "reference.json"
+
+    @property
+    def reference_sample_path(self) -> Path:
+        # A raw reference-text sample for the text-aware (domain-classifier) detector.
+        return self.artifacts_dir / "reference_sample.json"
 
     @property
     def primary_path(self) -> Path:
