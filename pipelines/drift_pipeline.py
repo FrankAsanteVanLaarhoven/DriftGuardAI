@@ -62,6 +62,8 @@ def detect_drift(sample_path: str) -> dict:
 def retrain_candidate() -> dict:
     """Retrain and register a NEW candidate version without promoting it."""
     settings = get_settings()
+    # Record the model in production now, before the retrain overwrites metrics.json.
+    incumbent_f1 = registry.current_primary_macro_f1(settings)
     os.environ["DRIFTGUARD_AUTO_PROMOTE"] = "0"
     get_settings.cache_clear()
     from driftguard import train
@@ -69,8 +71,8 @@ def retrain_candidate() -> dict:
     exit_code = train.main()  # writes metrics.json + baseline_metrics.json, registers version
     metrics = json.loads(settings.metrics_path.read_text())
     baseline = json.loads(settings.baseline_metrics_path.read_text())
-    gate = registry.baseline_gate(metrics["macro_f1"], baseline["macro_f1"],
-                                  settings.promotion_margin)
+    gate = registry.incumbent_gate(metrics["macro_f1"], baseline["macro_f1"],
+                                   incumbent_f1, settings.promotion_margin)
     return {"gate_passed": gate.passed and exit_code == 0, "reason": gate.reason,
             "candidate_version": registry.latest_version(settings)}
 
@@ -132,7 +134,7 @@ def main(argv: list[str] | None = None) -> int:
         else:
             dec = result["decision"]
             if not dec["gate_passed"]:
-                print("Candidate FAILED the baseline gate — NOT promoted (fail-closed).",
+                print("Candidate FAILED the promotion gate — NOT promoted (fail-closed).",
                       file=sys.stderr)
             elif not dec["promoted"]:
                 print("Candidate passed gate + canary — awaiting HUMAN approval to promote.",

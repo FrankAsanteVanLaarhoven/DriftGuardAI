@@ -54,10 +54,15 @@ def main(argv: list[str] | None = None) -> int:
 
     metrics = registry.evaluate(clf, xte, yte)
     baseline_m = json.loads(settings.baseline_metrics_path.read_text())
-    gate = registry.baseline_gate(metrics["macro_f1"], baseline_m["macro_f1"],
-                                  settings.promotion_margin)
+    # Gate against max(baseline, current primary): a slow transformer must beat the model
+    # actually serving, not just the tiny baseline — otherwise promotion is a downgrade.
+    incumbent_f1 = registry.current_primary_macro_f1(settings)
+    gate = registry.incumbent_gate(metrics["macro_f1"], baseline_m["macro_f1"],
+                                   incumbent_f1, settings.promotion_margin)
+    inc_txt = f"{incumbent_f1:.4f}" if incumbent_f1 is not None else "none"
     print(f"DistilBERT holdout: acc={metrics['accuracy']:.4f} macro_f1={metrics['macro_f1']:.4f}")
-    print(f"Baseline gate: {'PASS' if gate.passed else 'FAIL'} — {gate.reason}")
+    print(f"Incumbent primary macro_f1: {inc_txt}")
+    print(f"Promotion gate: {'PASS' if gate.passed else 'FAIL'} — {gate.reason}")
 
     out = settings.artifacts_dir / "primary_transformer.joblib"
     registry.save_bundle(registry.make_bundle(clf, "primary", metrics, "distilbert-1"), out)

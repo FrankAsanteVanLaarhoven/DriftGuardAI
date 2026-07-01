@@ -42,6 +42,37 @@ def test_baseline_gate_respects_margin():
     assert not gate.passed
 
 
+def test_incumbent_gate_rejects_candidate_worse_than_serving_primary():
+    # The downgrade case: candidate beats the tiny baseline (0.8956) but is worse than
+    # the linear primary already serving (0.9197) — e.g. a slow transformer at 0.91.
+    # It must be rejected so promotion never regresses production.
+    gate = registry.incumbent_gate(candidate_macro_f1=0.91, baseline_macro_f1=0.8956,
+                                   incumbent_macro_f1=0.9197)
+    assert gate.passed is False
+    assert "incumbent primary" in gate.reason
+
+
+def test_incumbent_gate_promotes_candidate_that_beats_both():
+    gate = registry.incumbent_gate(candidate_macro_f1=0.94, baseline_macro_f1=0.8956,
+                                   incumbent_macro_f1=0.9197)
+    assert gate.passed is True
+
+
+def test_incumbent_gate_falls_back_to_baseline_without_incumbent():
+    # Fresh deploy (no incumbent) must behave exactly like the baseline gate.
+    inc = registry.incumbent_gate(candidate_macro_f1=0.91, baseline_macro_f1=0.8956,
+                                  incumbent_macro_f1=None)
+    base = registry.baseline_gate(candidate_macro_f1=0.91, baseline_macro_f1=0.8956)
+    assert inc.passed is base.passed is True
+    assert "bar set by baseline" in inc.reason
+
+
+def test_effective_promotion_bar_picks_the_higher_reference():
+    assert registry.effective_promotion_bar(0.8956, 0.9197) == (0.9197, "incumbent primary")
+    assert registry.effective_promotion_bar(0.8956, 0.80) == (0.8956, "baseline")
+    assert registry.effective_promotion_bar(0.8956, None) == (0.8956, "baseline")
+
+
 def test_promotion_gate_fixed_matches_baseline_gate():
     d = registry.promotion_gate(candidate_fixed_f1=0.89, baseline_fixed_f1=0.90, mode="fixed")
     assert d.mode == "fixed"

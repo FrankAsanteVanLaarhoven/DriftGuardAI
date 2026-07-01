@@ -13,6 +13,7 @@ evaluator, the gate, and :func:`log_and_register`.
 
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -91,6 +92,57 @@ def baseline_gate(candidate_macro_f1: float, baseline_macro_f1: float,
         f"(= {threshold:.4f})"
     )
     return GateResult(passed, candidate_macro_f1, baseline_macro_f1, margin, reason)
+
+
+def effective_promotion_bar(baseline_macro_f1: float,
+                            incumbent_macro_f1: float | None = None) -> tuple[float, str]:
+    """The score a candidate must clear to be promoted: never below the committed
+    baseline *and* never below the model currently in production.
+
+    Returns ``(bar, source)`` where ``source`` names which model set the bar.
+    """
+    if incumbent_macro_f1 is not None and incumbent_macro_f1 > baseline_macro_f1:
+        return incumbent_macro_f1, "incumbent primary"
+    return baseline_macro_f1, "baseline"
+
+
+def incumbent_gate(candidate_macro_f1: float, baseline_macro_f1: float,
+                   incumbent_macro_f1: float | None = None,
+                   margin: float = 0.0) -> GateResult:
+    """No-worse-than-incumbent promotion gate.
+
+    Extends :func:`baseline_gate` so a candidate is promoted only if it clears
+    ``max(baseline, incumbent_primary) + margin``. This closes the downgrade gap where a
+    candidate beats the tiny baseline but is *worse* than the model already serving —
+    e.g. a slow transformer that scores below the incumbent linear primary. With no
+    incumbent (fresh deploy) it degrades exactly to :func:`baseline_gate`.
+    """
+    bar, source = effective_promotion_bar(baseline_macro_f1, incumbent_macro_f1)
+    threshold = bar + margin
+    passed = candidate_macro_f1 >= threshold
+    inc_txt = f"{incumbent_macro_f1:.4f}" if incumbent_macro_f1 is not None else "n/a"
+    reason = (
+        f"candidate macro-F1 {candidate_macro_f1:.4f} {'>=' if passed else '<'} "
+        f"max(baseline {baseline_macro_f1:.4f}, incumbent {inc_txt}) + margin {margin:.4f} "
+        f"(= {threshold:.4f}; bar set by {source})"
+    )
+    return GateResult(passed, candidate_macro_f1, bar, margin, reason)
+
+
+def current_primary_macro_f1(settings: Settings | None = None) -> float | None:
+    """Macro-F1 of the primary currently in production, or ``None`` if none is recorded.
+
+    Reads ``artifacts/metrics.json`` (written by the last promoted primary) — cheap and
+    avoids deserialising a possibly-heavy served model just to read its score.
+    """
+    settings = settings or get_settings()
+    path = settings.metrics_path
+    if not path.exists():
+        return None
+    try:
+        return float(json.loads(path.read_text())["macro_f1"])
+    except Exception:  # noqa: BLE001 - a missing/garbled metrics file just means "no incumbent"
+        return None
 
 
 @dataclass(frozen=True)

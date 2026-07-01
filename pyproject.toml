@@ -50,6 +50,9 @@ packages = ["src/driftguard"]
 line-length = 100
 target-version = "py312"
 src = ["src", "tests", "pipelines"]
+# Research notebooks use compact, pedagogical style (grouped imports, long prose lines)
+# that we deliberately don't hold to production lint rules.
+extend-exclude = ["*.ipynb"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "W"]

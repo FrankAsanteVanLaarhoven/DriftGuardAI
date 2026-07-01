@@ -81,7 +81,7 @@ def _deployment_report(settings: Settings, base_m, prim_m, gate, mlflow_info) ->
 - **Change:** retrain primary text classifier (ag_news, seed {settings.random_seed})
 - **Baseline (fallback) holdout:** {base_line}
 - **Primary (candidate) holdout:** {prim_line}
-- **Baseline gate:** {gate_line}
+- **Promotion gate (no-worse-than-incumbent):** {gate_line}
 - **MLflow run:** {mlflow_info.get('run_id', 'n/a')}
 - **Registered version:** {version}
 - **Tests:** run `make test` (unit + integration + fallback) — must be green.
@@ -94,6 +94,10 @@ def _deployment_report(settings: Settings, base_m, prim_m, gate, mlflow_info) ->
 def main() -> int:
     settings = get_settings()
     settings.ensure_dirs()
+
+    # Capture the incumbent primary's score *before* we overwrite metrics.json, so the
+    # promotion gate can refuse to replace a better model already in production.
+    incumbent_f1 = registry.current_primary_macro_f1(settings)
 
     frames = _load_or_build(settings)
     Xtr, ytr = frames["train"]["text"].tolist(), frames["train"]["label"].tolist()
@@ -119,9 +123,10 @@ def main() -> int:
     _write_json(settings.metrics_path, prim_m)
     log.info("Primary holdout:  acc=%.4f macro_f1=%.4f", prim_m["accuracy"], prim_m["macro_f1"])
 
-    # --- Baseline gate (fail-closed) -----------------------------------------
-    gate = registry.baseline_gate(prim_m["macro_f1"], base_m["macro_f1"], settings.promotion_margin)
-    log.info("Baseline gate: %s — %s", "PASS" if gate.passed else "FAIL", gate.reason)
+    # --- Promotion gate (fail-closed, no-worse-than-incumbent) ---------------
+    gate = registry.incumbent_gate(prim_m["macro_f1"], base_m["macro_f1"],
+                                   incumbent_f1, settings.promotion_margin)
+    log.info("Promotion gate: %s — %s", "PASS" if gate.passed else "FAIL", gate.reason)
 
     # --- Drift reference + demo samples --------------------------------------
     reference = drift.build_reference(Xtr, bins=settings.psi_bins)

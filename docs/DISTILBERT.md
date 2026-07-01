@@ -81,13 +81,18 @@ The script prints, in order:
 ```
 Fine-tuning distilbert-base-uncased for 2 epoch(s) on 108000 rows…
 DistilBERT holdout: acc=0.94xx macro_f1=0.94xx
-Baseline gate: PASS — candidate macro-F1 0.94xx >= baseline 0.8956 + margin 0.0000 (= 0.8956)
+Incumbent primary macro_f1: 0.9197
+Promotion gate: PASS — candidate macro-F1 0.94xx >= max(baseline 0.8956, incumbent 0.9197) + margin 0.0000 (= 0.9197; bar set by incumbent primary)
 Saved bundle -> .../artifacts/primary_transformer.joblib
 Promoted: pointer -> .../models/primary_pointer          # only with --promote AND a pass
 ```
 
-- **`macro_f1`** is the number that matters — compare it to the committed baseline in
-  `artifacts/baseline_metrics.json` (0.8956). Accuracy is secondary.
+- **`macro_f1`** is the number that matters — it must clear **`max(baseline 0.8956,
+  incumbent primary 0.9197)`**, not just the baseline. The gate is *no-worse-than-
+  incumbent*: a DistilBERT that beats 0.8956 but scores below the linear primary already
+  serving (0.9197) is **rejected**, because promoting it would be a downgrade (slower
+  *and* less accurate). This is why the full GPU run — targeting ~0.94 — matters; a weak
+  CPU run at ~0.91 will (correctly) fail to promote.
 - The DistilBERT **"LOAD REPORT" listing `UNEXPECTED`/`MISSING` weights is normal** — the
   MLM checkpoint's head is dropped and a fresh classification head is initialised. Not an
   error.
@@ -97,13 +102,18 @@ Promoted: pointer -> .../models/primary_pointer          # only with --promote A
 ## 2 · Confirm the gate promotes / rejects correctly
 
 ```bash
-# (a) Normal run — should PASS if DistilBERT beats the baseline on the holdout:
+# (a) Normal run — should PASS only if DistilBERT beats the incumbent primary (0.9197),
+#     not merely the baseline (0.8956):
 uv run --extra transformer python scripts/train_distilbert.py --epochs 2 --promote; echo "exit=$?"
 
 # (b) Prove fail-closed — an impossible margin must REJECT and NOT promote:
 DRIFTGUARD_PROMOTION_MARGIN=0.5 uv run --extra transformer \
   python scripts/train_distilbert.py --epochs 2 --promote; echo "exit=$?"   # expect exit=1
 ```
+
+- A weak (e.g. CPU-subsampled) DistilBERT scoring **between** the baseline and the
+  incumbent primary — say 0.91 — should print `Promotion gate: FAIL … bar set by
+  incumbent primary` and exit `1`. That is the no-worse-than-incumbent gate doing its job.
 
 - After a passing `--promote`, confirm the pointer moved:
   ```bash

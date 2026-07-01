@@ -39,7 +39,15 @@ HF ag_news + DVC(S3) ──▶ train (seeded, MLflow track+registry, baseline-ga
   holdout for the committed baseline).
 - The **baseline gate** (`driftguard.gate`, and the CI stage) is fail-closed:
   `candidate_macro_f1 >= baseline_macro_f1 + MARGIN` or the build/retrain stops and
-  nothing is registered/promoted.
+  nothing is registered/promoted. This is the *floor* — the merge check that no model
+  worse than the tiny baseline ever ships.
+- Promotion adds a second, stricter rule — the **no-worse-than-incumbent gate**
+  (`registry.incumbent_gate`): a candidate is promoted only if
+  `candidate_macro_f1 >= max(baseline_macro_f1, current_primary_macro_f1) + MARGIN`.
+  This closes the downgrade gap where a candidate beats the baseline but is *worse* than
+  the model already serving — e.g. a slow DistilBERT that scores below the incumbent
+  linear primary would pass the plain baseline gate yet degrade production. With no
+  incumbent (fresh deploy) it collapses back to the baseline gate.
 
 ## Model choices
 
