@@ -25,6 +25,7 @@ CLI::
 from __future__ import annotations
 
 import json
+import logging
 import sys
 from pathlib import Path
 from typing import Any
@@ -33,6 +34,8 @@ import numpy as np
 
 from driftguard import drift
 from driftguard.config import Settings, get_settings
+
+log = logging.getLogger("driftguard.textdrift")
 
 
 def _balanced(reference: list[str], current: list[str], seed: int) -> tuple[list[str], list[str]]:
@@ -111,11 +114,26 @@ def composite_drift(current_texts: list[str], reference_texts: list[str],
         if emb is not None:
             signals["embedding_mmd"] = {"mmd": emb["mmd"]}
 
-    drift_flag = any(s.get("drift") for s in signals.values() if "drift" in s)
+    decisive = [s.get("drift") for s in signals.values() if "drift" in s]
+    triggered_by = [k for k, s in signals.items() if s.get("drift")]
+    rule = settings.drift_composite_rule.lower()
+    if rule == "all":
+        drift_flag = bool(decisive) and all(decisive)
+    else:  # "any" (default, safety-first)
+        drift_flag = any(decisive)
+
+    if drift_flag:
+        log.warning(
+            "DRIFT declared (rule=%s) by %s | PSI=%.4f (thr %.2f) domain_auc=%.4f (thr %.2f)",
+            rule, triggered_by,
+            signals["psi"]["value"], settings.psi_threshold,
+            signals["domain_classifier"]["auc"], settings.domain_auc_threshold,
+        )
     return {
         "signals": signals,
+        "rule": rule,
         "drift": drift_flag,
-        "triggered_by": [k for k, s in signals.items() if s.get("drift")],
+        "triggered_by": triggered_by,
     }
 
 

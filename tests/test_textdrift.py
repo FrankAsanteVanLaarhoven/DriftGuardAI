@@ -8,6 +8,7 @@ stay quiet on in-distribution data.
 import random
 
 from driftguard import drift, textdrift
+from driftguard.config import Settings
 
 
 def _gen(vocab, n, rng):
@@ -56,3 +57,17 @@ def test_composite_fires_when_either_signal_fires():
     assert caught["drift"] is True
     assert "domain_classifier" in caught["triggered_by"]
     assert "psi" not in caught["triggered_by"]   # PSI alone would have missed it
+
+
+def test_composite_rule_all_requires_every_signal():
+    # With rule="all", the classifier-only semantic catch is NOT declared drift,
+    # because PSI abstains. Confirms the combination rule is configurable.
+    reference, _, semantic = _corpora()
+    ref_dist = drift.build_reference(reference, bins=10)
+    strict = Settings(drift_composite_rule="all")
+
+    result = textdrift.composite_drift(semantic, reference, ref_dist, settings=strict)
+    assert result["rule"] == "all"
+    assert result["signals"]["domain_classifier"]["drift"] is True
+    assert result["signals"]["psi"]["drift"] is False
+    assert result["drift"] is False   # "all" gate not satisfied

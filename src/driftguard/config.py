@@ -68,6 +68,11 @@ class Settings(BaseSettings):
     # 0.5 = indistinguishable (no drift); -> 1.0 = strongly separable (drift).
     domain_auc_threshold: float = 0.75
     embed_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    # How the composite verdict combines the per-detector signals:
+    #   "any" (default) = drift if PSI OR the domain classifier fires (safety-first);
+    #   "all"           = drift only if every signal fires (fewer false positives).
+    # The defaults ("any", psi 0.2, auc 0.75) reproduce the documented results table.
+    drift_composite_rule: str = "any"
 
     @property
     def metrics_path(self) -> Path:

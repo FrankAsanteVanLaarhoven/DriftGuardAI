@@ -84,9 +84,13 @@ Two complementary signals run over recent traffic (`src/driftguard/textdrift.py`
    shift that PSI is blind to. An optional sentence-embedding MMD sits behind the
    `embed` extra.
 
-The `composite_drift` verdict fires if *either* signal trips. Measured: a
-semantic-shift sample with an identical length distribution scores PSI 0.0137 (PSI
-misses it) but domain-classifier AUC 1.0000 (caught). See `CASE_STUDY.md`.
+The `composite_drift` verdict combines the signals by a configurable rule
+(`DRIFTGUARD_DRIFT_COMPOSITE_RULE=any|all`; default `any` = safety-first) and logs
+which detector fired with its score. Thresholds are configurable too
+(`DRIFTGUARD_PSI_THRESHOLD`, `DRIFTGUARD_DOMAIN_AUC_THRESHOLD`); the defaults reproduce
+the documented results. Measured: a semantic-shift sample with an identical length
+distribution scores PSI 0.0137 (PSI misses it) but domain-classifier AUC 1.0000
+(caught). See `CASE_STUDY.md`.
 
 ## Trade-offs / limitations
 - The domain classifier needs a reference *text* sample (`reference_sample.json`,
