@@ -57,6 +57,9 @@ class Settings(BaseSettings):
 
     # Promotion / baseline gate
     promotion_margin: float = 0.0  # candidate macro-F1 must beat baseline by >= this
+    # `make train` promotes a passing candidate automatically. The drift pipeline
+    # turns this off so promotion waits behind the human gate.
+    auto_promote: bool = True
 
     # Drift detection
     psi_threshold: float = 0.2  # >0.2 = action per common PSI convention

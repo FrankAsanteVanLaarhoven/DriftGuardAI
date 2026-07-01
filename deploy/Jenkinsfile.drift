@@ -1,0 +1,65 @@
+// DriftGuard scheduled drift -> retrain pipeline.
+// Cron: collect recent traffic -> PSI check -> on breach retrain a candidate
+// (fail-closed baseline gate) -> canary -> HUMAN GATE -> promote. Never auto-promotes.
+pipeline {
+    agent any
+    options { timestamps(); disableConcurrentBuilds() }
+    triggers { cron('H */6 * * *') }   // every ~6 hours
+
+    parameters {
+        string(name: 'SAMPLE', defaultValue: 'artifacts/current_shifted.json',
+               description: 'Recent-traffic sample to evaluate for drift.')
+    }
+
+    environment { DRIFT = 'false' }
+
+    stages {
+        stage('setup') { steps { sh 'make install' } }
+
+        stage('drift-check') {
+            steps {
+                script {
+                    // `make drift` exits non-zero when PSI breaches the threshold.
+                    def code = sh(script: "make drift", returnStatus: true)
+                    env.DRIFT = (code != 0) ? 'true' : 'false'
+                    echo "Drift detected: ${env.DRIFT}"
+                }
+            }
+        }
+
+        stage('retrain-candidate') {
+            when { environment name: 'DRIFT', value: 'true' }
+            steps {
+                // Registers a NEW candidate version; auto-promotion is disabled here.
+                sh "DRIFTGUARD_AUTO_PROMOTE=0 uv run python pipelines/drift_pipeline.py " +
+                   "--sample ${params.SAMPLE} --retrain"
+            }
+        }
+
+        stage('human-gate') {
+            when { environment name: 'DRIFT', value: 'true' }
+            steps {
+                timeout(time: 24, unit: 'HOURS') {
+                    input message: 'Promote the retrained candidate to production?', ok: 'Promote'
+                }
+            }
+        }
+
+        stage('promote') {
+            when { environment name: 'DRIFT', value: 'true' }
+            steps {
+                sh "uv run python pipelines/drift_pipeline.py --sample ${params.SAMPLE} " +
+                   "--retrain --approve"
+            }
+        }
+    }
+
+    post {
+        failure {
+            echo 'Drift pipeline failed. Production alias left unchanged (fail-closed).'
+            // Idempotent model rollback: re-point the alias to the previous version.
+            sh 'echo "Rollback: `uv run python -c \\"from driftguard import registry;' +
+               ' print(registry.production_version())\\"` remains the served model."'
+        }
+    }
+}

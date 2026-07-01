@@ -247,3 +247,40 @@ def _latest_version(client, name: str) -> str:
     if not versions:
         return ""
     return max(versions, key=lambda v: int(v.version)).version
+
+
+def production_version(settings: Settings | None = None) -> str | None:
+    """Return the model version currently behind the ``production`` alias, if any."""
+    settings = settings or get_settings()
+    from mlflow.tracking import MlflowClient
+
+    client = MlflowClient(tracking_uri=settings.mlflow_tracking_uri)
+    try:
+        mv = client.get_model_version_by_alias(settings.registered_model_name, "production")
+        return mv.version
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def promote_version(version: str, settings: Settings | None = None) -> None:
+    """Human-gated promotion: point the ``production`` alias at ``version``."""
+    settings = settings or get_settings()
+    from mlflow.tracking import MlflowClient
+
+    client = MlflowClient(tracking_uri=settings.mlflow_tracking_uri)
+    client.set_registered_model_alias(settings.registered_model_name, "production", version)
+    try:
+        client.transition_model_version_stage(
+            settings.registered_model_name, version, "Production",
+            archive_existing_versions=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        log.info("Stage transition skipped (alias set): %s", exc)
+
+
+def latest_version(settings: Settings | None = None) -> str:
+    settings = settings or get_settings()
+    from mlflow.tracking import MlflowClient
+
+    client = MlflowClient(tracking_uri=settings.mlflow_tracking_uri)
+    return _latest_version(client, settings.registered_model_name)

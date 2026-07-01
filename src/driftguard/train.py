@@ -125,7 +125,7 @@ def main() -> int:
             metrics={"accuracy": prim_m["accuracy"], "macro_f1": prim_m["macro_f1"],
                      "baseline_macro_f1": base_m["macro_f1"]},
             settings=settings,
-            promote=gate.passed,
+            promote=gate.passed and settings.auto_promote,
         )
         log.info("MLflow run %s registered version %s (promoted=%s)",
                  mlflow_info.get("run_id"), mlflow_info.get("model_version"),
