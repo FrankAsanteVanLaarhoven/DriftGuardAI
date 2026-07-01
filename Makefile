@@ -43,6 +43,9 @@ run: ## Serve the FastAPI app locally with the fallback contract
 drift: ## Run the PSI drift check against a sample (non-zero exit on drift)
 	uv run python -m driftguard.drift artifacts/current_shifted.json
 
+gate: ## Baseline gate: fail (exit 1) if the candidate regresses vs baseline
+	uv run python -m driftguard.gate
+
 docker: ## Build the production image
 	docker build -t $(IMAGE) .
 
