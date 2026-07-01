@@ -1,0 +1,17 @@
+# Requires the Prometheus Operator CRDs (kube-prometheus-stack).
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: driftguard
+  namespace: driftguard
+  labels:
+    app.kubernetes.io/name: driftguard
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: driftguard
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
