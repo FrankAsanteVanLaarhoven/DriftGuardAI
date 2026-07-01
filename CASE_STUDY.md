@@ -65,8 +65,28 @@ Measured with `python -m driftguard.textdrift` — a text-aware domain classifie
 The semantic-shift sample has an **identical length distribution** to
 in-distribution data — so PSI scores it exactly 0.0137 and misses it entirely — yet
 the domain classifier separates it perfectly (AUC 1.0). This is the concrete,
-reproducible case for multi-layer, text-aware drift detection (3 new tests encode it;
-19 tests total pass).
+reproducible case for multi-layer, text-aware drift detection.
+
+### Drift-injection benchmark (`make benchmark`, 5 seeds, window 600)
+
+Controlled generators (Garcia-style) scored by the composite detector. **Mean
+detection on genuine drift = 0.80; false-positive rate on `no_drift` = 0.00.**
+
+| drift kind        | detection | mean PSI | mean domain AUC | PSI fired | domain fired |
+|-------------------|-----------|----------|-----------------|-----------|--------------|
+| no_drift          | 0.00      | 0.0130   | 0.5215          | 0/5       | 0/5          |
+| length_truncate   | 1.00      | 12.5169  | 0.9736          | 5/5       | 5/5          |
+| class_prior_shift | 1.00      | 0.0535   | 0.7959          | 0/5       | 5/5          |
+| adjective_swap    | 1.00      | 0.0130   | 0.9978          | 0/5       | 5/5          |
+| semantic_replace  | 1.00      | 0.0130   | 1.0000          | 0/5       | 5/5          |
+| gradual_topic     | 0.00      | 0.0130   | 0.7182          | 0/5       | 0/5          |
+
+PSI alone fires only on the length shift; every semantic category is carried by the
+domain classifier. Zero false positives on in-distribution windows. The single miss,
+`gradual_topic` at 40% injection (AUC 0.7182, just under the 0.75 threshold), is the
+honest hard case — partial/gradual drift is caught at higher severity or a lower
+threshold, at some false-positive cost. This is exactly the trade-off the benchmark
+quantifies rather than hides.
 
 ## Container & stack
 

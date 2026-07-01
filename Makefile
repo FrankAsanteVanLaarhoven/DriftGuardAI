@@ -49,6 +49,9 @@ gate: ## Baseline gate: fail (exit 1) if the candidate regresses vs baseline
 drift-text: ## Text-aware composite drift (PSI + domain-classifier) on a sample
 	uv run python -m driftguard.textdrift artifacts/current_shifted.json
 
+benchmark: ## Run the controlled drift-injection benchmark (detection rate + FPR)
+	uv run python benchmarks/eval_harness.py
+
 docker: ## Build the production image
 	docker build -t $(IMAGE) .
 
