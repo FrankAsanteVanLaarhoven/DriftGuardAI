@@ -47,9 +47,33 @@ HF data + DVC(S3) -> train (seeded, MLflow track+registry, baseline-gate) -> Doc
 See `ARCHITECTURE.md` for the design, `CASE_STUDY.md` for measured numbers, and the
 `deploy/` tree for Terraform (AWS), Kubernetes, Ansible, and monitoring.
 
+## Prove it end to end
+
+```bash
+make demo
+```
+Installs, trains, runs the full test suite (including the fallback chaos test),
+serves predictions, **removes the primary and shows the service stay up on the
+baseline (HTTP 200)**, then flags drift on a shifted sample.
+
+## Docs & layout
+- `ARCHITECTURE.md` — the closed loop and the two-sense fallback contract.
+- `CASE_STUDY.md` — measured numbers (model quality, PSI, resilience, infra checks).
+- `CLAUDE.md` — repository conventions and guardrails.
+- `deploy/terraform/README.md` — exact AWS `apply` + `kubeconfig` steps.
+
+```
+src/driftguard/{config,data,train,gate,drift,registry,api/}  tests/  pipelines/
+deploy/{k8s,terraform,ansible,monitoring}  Dockerfile  docker-compose.yml  Jenkinsfile
+models/baseline.joblib  artifacts/{metrics,baseline_metrics,reference}.json
+```
+
 ## Status
 
 Built phase by phase; each phase has acceptance criteria that must pass before the
 next. Local phases (data → train → serve → stack → drift) run end to end. AWS
 provisioning is real Terraform that applies **with your credentials** — nothing is
 faked; the exact `apply` steps are documented in `deploy/terraform/README.md`.
+
+## License
+Apache-2.0. Copyright 2026 Frank Asante Van Laarhoven.

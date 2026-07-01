@@ -1,0 +1,81 @@
+# DriftGuard case study — measured results
+
+All numbers below were **measured on this repository** with the committed code and
+`fancyzhx/ag_news`, seed 42, on CPU. They are reproducible with `make train`,
+`make test`, `make stack`, and `make demo`. Nothing here is estimated.
+
+## Dataset (fixed, seeded, DVC-versioned)
+
+| Split | Rows    | Notes                              |
+|-------|---------|------------------------------------|
+| train | 108,000 | 90% of the HF train split          |
+| val   | 12,000  | 10% stratified holdout (seed 42)   |
+| test  | 7,600   | official test split (frozen holdout)|
+
+`dvc repro` is reproducible: a forced rebuild produced byte-identical output md5s.
+
+## Model quality (frozen test holdout)
+
+| Model                | Accuracy | Macro-F1 |
+|----------------------|----------|----------|
+| Baseline (fallback)  | 0.8958   | 0.8956   |
+| Primary (candidate)  | 0.9199   | 0.9197   |
+
+**Baseline gate:** the primary clears the gate (0.9197 ≥ 0.8956 + 0.0). With an
+impossible margin (0.5) the same candidate is **blocked** (0.9197 < 1.3956) and the
+`production` alias stayed on the previous version — fail-closed confirmed.
+
+## Operational resilience (the fallback contract)
+
+Measured against the running service and in the test suite:
+
+- Removing `models/primary_pointer` from a live service → next `/predict` returned
+  **HTTP 200** with `"served_by":"baseline"`; `/model-info` flipped to
+  `active_tier=baseline, primary_available=false`; `driftguard_model_tier{tier="baseline"}`
+  went to **1.0**. The service never returned a 5xx.
+- A **corrupt** primary (invalid joblib) fails the canary self-test at load → baseline
+  serves.
+- A **zero latency budget** forces every primary call over budget → baseline serves,
+  `driftguard_primary_latency_breach_total` increments.
+- Primary predict latency on CPU (local): sub-3 ms per request (0.7–2.8 ms observed).
+
+**Test suite: 16 passed** — unit + integration + **5 fallback/chaos tests**.
+
+## Drift detection (PSI over token_count, threshold 0.2)
+
+| Sample              | PSI      | Verdict |
+|---------------------|----------|---------|
+| in-distribution     | 0.0137   | stable  |
+| shifted (truncated) | 12.5169  | drift → non-zero exit, retrain triggered |
+
+The drift→retrain pipeline detected the shift, retrained a candidate, ran the
+fail-closed gate, held at the human gate, and only then promoted.
+
+## Container & stack
+
+- Multi-stage image builds and runs as **non-root (uid 10001)** with a **read-only
+  root filesystem**; Docker `HEALTHCHECK` reports healthy. Image size ≈ 1.5 GB
+  (MLflow + scientific Python stack).
+- `docker compose up` brought up app + Prometheus + Grafana + MLflow. Prometheus
+  scraped the app (`target: up`, `driftguard_model_tier` visible); Grafana
+  auto-provisioned the Prometheus datasource and the **DriftGuard Service Health**
+  dashboard (including the active-model-tier panel).
+
+## Infrastructure (validated, not applied)
+
+- **Terraform:** `fmt` clean, `init` succeeded, `validate` → *"Success! The
+  configuration is valid."* Covers ECR (immutable, scan-on-push), two versioned S3
+  buckets, VPC + EKS managed node group, least-privilege IRSA, Secrets Manager.
+  `apply` is documented and gated on your AWS credentials — no live infra was
+  provisioned.
+- **Kubernetes:** `kubeconform` on the rendered manifests → **5 valid, 0 invalid, 0
+  errors**, 2 Prometheus-Operator CRDs skipped (no offline schema). Probes wired
+  (`/ready`, `/health`), HPA present, degraded-tier `PrometheusRule` present.
+
+## Limitations (stated plainly)
+- Metrics are single-run, CPU, on one machine; treat them as reproducible baselines,
+  not a leaderboard claim.
+- PSI on `token_count` catches covariate shift, not subtle semantic drift — the
+  Evidently/embedding path is the documented upgrade.
+- AG News is a clean, static benchmark; production news streams have higher velocity
+  and label noise.
