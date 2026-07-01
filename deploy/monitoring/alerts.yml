@@ -1,0 +1,22 @@
+groups:
+  - name: driftguard
+    rules:
+      # The core resilience alert: serving degraded on the baseline for >5 minutes
+      # means the primary is down and someone should be paged.
+      - alert: DriftGuardServingDegraded
+        expr: driftguard_model_tier{tier="baseline"} == 1
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: "DriftGuard running degraded (baseline tier) for >5m"
+          description: "Primary model unavailable on {{ $labels.instance }}; serving fallback."
+
+      - alert: DriftGuardHighFallbackRate
+        expr: rate(driftguard_fallback_total[5m]) > 0.2
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Elevated request-time fallback rate"
+          description: "More than 20% of requests are falling back to the baseline."
