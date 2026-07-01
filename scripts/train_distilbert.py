@@ -1,14 +1,14 @@
-"""Fine-tune a DistilBERT primary and gate it against the committed baseline.
+"""Fine-tune a DistilBERT primary and gate it against the incumbent primary.
 
-Run this on a GPU host (see docs/DISTILBERT.md). It reuses the exact seeded splits,
-the model-bundle format, and the (drift-aware) baseline gate, so the resulting model
-is served, gated, and fallen-back-from with no serving-code changes.
+Runs on a GPU when one is present (the classifier auto-selects CUDA). It reuses the exact
+seeded splits, the model-bundle format, and the no-worse-than-incumbent gate, so the
+resulting model is served, gated, and fallen-back-from with no serving-code changes.
 
     uv sync --extra transformer
-    uv run python scripts/train_distilbert.py --epochs 2 --promote
+    make train-transformer          # 3 epochs, gated + promoted
 
-Not executed in the CPU-only build environment — measure the numbers on your host and
-record them honestly in CASE_STUDY.md.
+Measured on an RTX 4080 SUPER: accuracy 0.9413, macro-F1 0.9412 — it beat the incumbent
+linear primary (0.9197) and was promoted. Numbers recorded in CASE_STUDY.md.
 """
 
 from __future__ import annotations

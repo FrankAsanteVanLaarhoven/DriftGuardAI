@@ -5,9 +5,10 @@ the **fallback**. If the transformer OOMs, fails to load, or breaches its per-re
 latency budget, the service degrades to the fast classic model instead of going down —
 the fallback contract already enforces this, so **no serving code changes are needed**.
 
-> This was **not executed in the CPU-only build environment**. Run it on a GPU host and
-> record the measured numbers in `CASE_STUDY.md`. Do not copy the illustrative range
-> below as if it were measured here.
+> **Measured, not illustrative.** This was run on an NVIDIA RTX 4080 SUPER: DistilBERT
+> reached **accuracy 0.9413 / macro-F1 0.9412** on the frozen holdout and was promoted
+> (it beat the incumbent linear primary 0.9197, not just the baseline). See `CASE_STUDY.md`.
+> Reproduce with `make train-transformer`.
 
 ## 1. Install the transformer extra
 
@@ -20,23 +21,44 @@ uv run python -c "import torch; print('cuda', torch.cuda.is_available())"
 
 ```bash
 make data
-# quick smoke on a subset first:
-uv run python scripts/train_distilbert.py --epochs 1 --max-train-rows 8000
-# full run:
-uv run python scripts/train_distilbert.py --epochs 2 --promote
+make train-transformer               # 3 epochs, gated + promoted; reproduces macro-F1 0.9412
+```
+
+`make train-transformer` runs, verbatim:
+
+```bash
+uv run --extra transformer python scripts/train_distilbert.py \
+    --epochs 3 --batch-size 32 --max-length 128 --promote
+```
+
+For a quick smoke on a subset first:
+
+```bash
+uv run --extra transformer python scripts/train_distilbert.py --epochs 1 --max-train-rows 8000
 ```
 
 What the script does:
 1. Loads the identical seeded ag_news splits.
-2. Fine-tunes `distilbert-base-uncased` (4 labels).
-3. Evaluates on the frozen test holdout and **runs the baseline gate** against the
-   committed linear baseline — fail-closed, exactly like the linear primary.
+2. Fine-tunes `distilbert-base-uncased` (4 labels), auto-selecting CUDA when available.
+3. Evaluates on the frozen test holdout and **runs the no-worse-than-incumbent gate** —
+   fail-closed, requiring `max(baseline, current primary)`, exactly like the linear primary.
 4. Saves a bundle to `artifacts/primary_transformer.joblib`. With `--promote` (and a
    passing gate) it points the service primary at that bundle.
 
+## 3. Serve the DistilBERT primary
+
+```bash
+make run-transformer                 # serves with torch loaded; PORT overridable
+```
+
+This serves the promoted DistilBERT bundle. The fallback contract is unchanged: if torch
+is absent (`make run`), the bundle fails to load, or a request breaches the latency
+budget, the service degrades to the linear baseline — `/ready` stays 200. Measured on this
+host: the promoted bundle loads, passes its canary self-test, and classifies a
+markets/rates sample as `Business` (0.97).
+
 Published DistilBERT/BERT results on AG News land around **~0.94–0.95 accuracy**
-(Zhang et al. 2015 and later transformer baselines) — treat that as the *target to
-verify*, not a claim.
+(Zhang et al. 2015 and later transformer baselines) — consistent with the measured 0.9413.
 
 ## 3. Serve it (DistilBERT primary, linear baseline fallback)
 

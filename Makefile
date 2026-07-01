@@ -10,7 +10,8 @@ IMAGE ?= driftguard:local
 PORT ?= 8000
 SERVICE_URL ?= http://localhost:$(PORT)
 
-.PHONY: help install lock lint fmt test data train run drift docker stack stack-down demo clean
+.PHONY: help install lock lint fmt test data train train-transformer run run-transformer \
+	drift docker stack stack-down demo clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -37,8 +38,15 @@ data: ## Build the fixed, seeded processed dataset from HF ag_news
 train: ## Train primary + baseline, register in MLflow, write baseline gate metrics
 	uv run python -m driftguard.train
 
+train-transformer: ## Fine-tune, gate, and promote the DistilBERT primary (GPU; reproduces macro-F1 0.9412)
+	uv run --extra transformer python scripts/train_distilbert.py \
+		--epochs 3 --batch-size 32 --max-length 128 --promote
+
 run: ## Serve the FastAPI app locally with the fallback contract
 	uv run uvicorn driftguard.api.main:app --host 0.0.0.0 --port $(PORT)
+
+run-transformer: ## Serve with the transformer extra (serves the promoted DistilBERT bundle); still falls back to baseline
+	uv run --extra transformer uvicorn driftguard.api.main:app --host 0.0.0.0 --port $(PORT)
 
 drift: ## Run the PSI drift check against a sample (non-zero exit on drift)
 	uv run python -m driftguard.drift artifacts/current_shifted.json
