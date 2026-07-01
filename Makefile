@@ -52,6 +52,9 @@ drift-text: ## Text-aware composite drift (PSI + domain-classifier) on a sample
 benchmark: ## Run the controlled drift-injection benchmark (detection rate + FPR)
 	uv run python benchmarks/eval_harness.py
 
+benchmark-sweep: ## Severity sweep (detection boundary) for gradual_topic drift
+	uv run python benchmarks/eval_harness.py --sweep gradual_topic
+
 docker: ## Build the production image
 	docker build -t $(IMAGE) .
 

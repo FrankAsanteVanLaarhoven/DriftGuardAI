@@ -35,3 +35,26 @@ zero false positives. The one miss, `gradual_topic` at 40% injection, sits just 
 the 0.75 AUC threshold (0.7182): partial/gradual drift is the genuinely hard case, and
 it is caught at higher injection severity or a lower threshold — at some false-positive
 cost. This trade-off is exactly what the benchmark exists to quantify.
+
+## Detection boundary: `gradual_topic` severity sweep
+
+`make benchmark-sweep` (5 seeds, window 600) traces detection vs. injection fraction:
+
+| severity | detection | mean domain AUC | mean PSI |
+|----------|-----------|-----------------|----------|
+| 0.10     | 0.00      | 0.5668          | 0.0168   |
+| 0.20     | 0.00      | 0.6059          | 0.0168   |
+| 0.30     | 0.00      | 0.6724          | 0.0168   |
+| 0.40     | 0.00      | 0.7067          | 0.0168   |
+| **0.50** | **1.00**  | **0.7639**      | 0.0168   |
+| 0.60     | 1.00      | 0.8062          | 0.0168   |
+| 0.70     | 1.00      | 0.8577          | 0.0168   |
+| 0.80     | 1.00      | 0.9005          | 0.0168   |
+| 0.90     | 1.00      | 0.9511          | 0.0168   |
+
+The domain-classifier AUC rises monotonically with injection fraction and crosses the
+0.75 gate at **~50% injection** — the detection boundary for gradual topic drift at the
+default threshold. PSI stays flat at 0.0168 across the whole sweep: token-count is
+structurally blind to topic injection that preserves length. Lowering the AUC gate
+shifts the boundary left (earlier detection) at a false-positive cost — a deliberate,
+now-quantified operating-point choice.

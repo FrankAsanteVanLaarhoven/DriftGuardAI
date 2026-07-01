@@ -88,6 +88,13 @@ honest hard case — partial/gradual drift is caught at higher severity or a low
 threshold, at some false-positive cost. This is exactly the trade-off the benchmark
 quantifies rather than hides.
 
+**Detection boundary (`make benchmark-sweep`, gradual_topic, 5 seeds).** The
+domain-classifier AUC rises monotonically with injection fraction and crosses the 0.75
+gate at ~50% injection (0.40→0.7067 miss, 0.50→0.7639 caught, 0.90→0.9511); PSI stays
+flat at 0.0168 across the whole range. So the single miss above is one point on a clean
+boundary curve, not a random failure — the operating threshold sets exactly where
+gradual drift is caught.
+
 ## Container & stack
 
 - Multi-stage image builds and runs as **non-root (uid 10001)** with a **read-only

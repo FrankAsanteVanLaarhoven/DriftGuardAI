@@ -44,3 +44,13 @@ def test_no_false_positive_and_semantic_is_caught():
 
     shifted = gen.semantic_replace(pool, 200, random.Random(1), severity=0.7)
     assert textdrift.composite_drift(shifted, reference, ref_dist, settings)["drift"] is True
+
+
+def test_severity_sweep_is_monotone_in_separability():
+    _pool()  # ensure data exists / skip otherwise
+    from eval_harness import sweep
+
+    result = sweep("gradual_topic", severities=[0.1, 0.9], seeds=1, window=200)
+    aucs = [r["mean_domain_auc"] for r in result["rows"]]
+    # Heavier topic injection must be at least as separable as light injection.
+    assert aucs[-1] > aucs[0]

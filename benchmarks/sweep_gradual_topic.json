@@ -1,0 +1,62 @@
+{
+  "kind": "gradual_topic",
+  "seeds": 5,
+  "window": 600,
+  "auc_threshold": 0.75,
+  "rows": [
+    {
+      "severity": 0.1,
+      "detection_rate": 0.0,
+      "mean_domain_auc": 0.5668388888888889,
+      "mean_psi": 0.016800257150875388
+    },
+    {
+      "severity": 0.2,
+      "detection_rate": 0.0,
+      "mean_domain_auc": 0.6059222222222221,
+      "mean_psi": 0.016800257150875388
+    },
+    {
+      "severity": 0.3,
+      "detection_rate": 0.0,
+      "mean_domain_auc": 0.6723861111111111,
+      "mean_psi": 0.016800257150875388
+    },
+    {
+      "severity": 0.4,
+      "detection_rate": 0.0,
+      "mean_domain_auc": 0.7066777777777777,
+      "mean_psi": 0.016800257150875388
+    },
+    {
+      "severity": 0.5,
+      "detection_rate": 1.0,
+      "mean_domain_auc": 0.7638527777777777,
+      "mean_psi": 0.016800257150875388
+    },
+    {
+      "severity": 0.6,
+      "detection_rate": 1.0,
+      "mean_domain_auc": 0.8061833333333334,
+      "mean_psi": 0.016800257150875388
+    },
+    {
+      "severity": 0.7,
+      "detection_rate": 1.0,
+      "mean_domain_auc": 0.8577388888888889,
+      "mean_psi": 0.016800257150875388
+    },
+    {
+      "severity": 0.8,
+      "detection_rate": 1.0,
+      "mean_domain_auc": 0.9004944444444444,
+      "mean_psi": 0.016800257150875388
+    },
+    {
+      "severity": 0.9,
+      "detection_rate": 1.0,
+      "mean_domain_auc": 0.9511499999999999,
+      "mean_psi": 0.016800257150875388
+    }
+  ]
+}
