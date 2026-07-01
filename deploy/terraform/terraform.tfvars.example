@@ -1,0 +1,15 @@
+# Copy to terraform.tfvars and adjust. Never commit real values / state.
+region              = "eu-west-2"
+project             = "driftguard"
+cluster_name        = "driftguard"
+cluster_version     = "1.30"
+vpc_cidr            = "10.42.0.0/16"
+node_instance_types = ["t3.large"]
+node_desired_size   = 2
+node_min_size       = 1
+node_max_size       = 4
+app_namespace       = "driftguard"
+app_service_account = "driftguard"
+tags = {
+  Owner = "frank"
+}

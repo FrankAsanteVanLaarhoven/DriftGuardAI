@@ -35,3 +35,12 @@ node_modules/
 .idea/
 .vscode/
 .dvcstore/
+
+# Terraform
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+deploy/terraform/terraform.tfvars
+*.tfplan
+tf.plan
+crash.log

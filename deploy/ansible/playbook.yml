@@ -1,0 +1,80 @@
+---
+# Non-Kubernetes deployment path: run DriftGuard as a Docker container managed by
+# systemd on a plain VM. Portable to any cloud or on-prem host.
+#
+# Run:  ansible-playbook -i inventory.ini playbook.yml \
+#         -e image=<ecr-url>:<sha> -e region=eu-west-2
+- name: Deploy DriftGuard
+  hosts: driftguard
+  become: true
+
+  vars:
+    image: "driftguard:local"
+    app_port: 8000
+    primary_model_uri: ""
+    mlflow_tracking_uri: ""
+    region: "eu-west-2"
+
+  tasks:
+    - name: Install Docker engine
+      ansible.builtin.package:
+        name: docker.io
+        state: present
+
+    - name: Ensure Docker is running
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Authenticate to ECR (only for *.dkr.ecr.* images)
+      ansible.builtin.shell: >
+        aws ecr get-login-password --region {{ region }}
+        | docker login --username AWS --password-stdin {{ image.split('/')[0] }}
+      when: "'.dkr.ecr.' in image"
+      changed_when: false
+
+    - name: Pull the application image
+      community.docker.docker_image:
+        name: "{{ image }}"
+        source: pull
+
+    - name: Install the systemd unit
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/driftguard.service
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=DriftGuard API
+          After=docker.service
+          Requires=docker.service
+
+          [Service]
+          Restart=always
+          ExecStartPre=-/usr/bin/docker rm -f driftguard
+          ExecStart=/usr/bin/docker run --rm --name driftguard \
+            -p {{ app_port }}:8000 \
+            --read-only --tmpfs /tmp \
+            -e DRIFTGUARD_PRIMARY_MODEL_URI={{ primary_model_uri }} \
+            -e DRIFTGUARD_MLFLOW_TRACKING_URI={{ mlflow_tracking_uri }} \
+            {{ image }}
+          ExecStop=/usr/bin/docker stop driftguard
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Reload systemd and (re)start DriftGuard
+      ansible.builtin.systemd:
+        name: driftguard
+        state: restarted
+        daemon_reload: true
+        enabled: true
+
+    - name: Wait for readiness
+      ansible.builtin.uri:
+        url: "http://localhost:{{ app_port }}/ready"
+        status_code: 200
+      register: ready
+      retries: 20
+      delay: 3
+      until: ready.status == 200
