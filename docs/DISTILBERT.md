@@ -67,3 +67,92 @@ DRIFTGUARD_GATE_HOLDOUT_MODE=dual make recovery
 - The bundle embeds the torch model via joblib; the serving image must install the
   `transformer` extra. Keep the linear `models/baseline.joblib` committed as the
   always-loadable floor.
+
+---
+
+# Post-run checklist
+
+Run through this after `scripts/train_distilbert.py` finishes.
+
+## 1 · Interpret the training output
+
+The script prints, in order:
+
+```
+Fine-tuning distilbert-base-uncased for 2 epoch(s) on 108000 rows…
+DistilBERT holdout: acc=0.94xx macro_f1=0.94xx
+Baseline gate: PASS — candidate macro-F1 0.94xx >= baseline 0.8956 + margin 0.0000 (= 0.8956)
+Saved bundle -> .../artifacts/primary_transformer.joblib
+Promoted: pointer -> .../models/primary_pointer          # only with --promote AND a pass
+```
+
+- **`macro_f1`** is the number that matters — compare it to the committed baseline in
+  `artifacts/baseline_metrics.json` (0.8956). Accuracy is secondary.
+- The DistilBERT **"LOAD REPORT" listing `UNEXPECTED`/`MISSING` weights is normal** — the
+  MLM checkpoint's head is dropped and a fresh classification head is initialised. Not an
+  error.
+- **Exit code**: `0` = gate passed (promotable), `1` = gate failed (fail-closed). Check
+  with `echo $?`.
+
+## 2 · Confirm the gate promotes / rejects correctly
+
+```bash
+# (a) Normal run — should PASS if DistilBERT beats the baseline on the holdout:
+uv run --extra transformer python scripts/train_distilbert.py --epochs 2 --promote; echo "exit=$?"
+
+# (b) Prove fail-closed — an impossible margin must REJECT and NOT promote:
+DRIFTGUARD_PROMOTION_MARGIN=0.5 uv run --extra transformer \
+  python scripts/train_distilbert.py --epochs 2 --promote; echo "exit=$?"   # expect exit=1
+```
+
+- After a passing `--promote`, confirm the pointer moved:
+  ```bash
+  cat models/primary_pointer          # -> artifacts/primary_transformer.joblib
+  ```
+- Under concept drift, validate with the drift-aware gate (adapt + no catastrophic
+  forgetting):
+  ```bash
+  DRIFTGUARD_GATE_HOLDOUT_MODE=dual make recovery
+  ```
+
+## 3 · Verify fallback + readiness still hold
+
+Serving the DistilBERT bundle needs torch, so start the API with the extra:
+
+```bash
+uv run --extra transformer uvicorn driftguard.api.main:app --host 127.0.0.1 --port 8010
+```
+
+```bash
+curl -s localhost:8010/ready                       # {"ready":true, ...}  (200)
+curl -s localhost:8010/model-info                  # active_tier=primary, source=pointer:...primary_transformer.joblib
+curl -s -X POST localhost:8010/predict -H 'content-type: application/json' \
+  -d '{"text":"New GPU sets an on-device AI record."}'   # served_by:"primary"
+```
+
+Then prove graceful degradation (all must keep returning **HTTP 200**):
+
+```bash
+# (a) Latency budget breach -> baseline serves:
+DRIFTGUARD_PRIMARY_LATENCY_BUDGET_MS=1 uv run --extra transformer \
+  uvicorn driftguard.api.main:app --port 8010     # every DistilBERT call is "too slow"
+#   -> /predict returns served_by:"baseline"; driftguard_primary_latency_breach_total climbs.
+
+# (b) Primary artifact pulled -> baseline serves, /ready stays 200, tier gauge flips:
+rm models/primary_pointer
+curl -s localhost:8010/predict -X POST -H 'content-type: application/json' -d '{"text":"x"}'  # served_by:"baseline"
+curl -s localhost:8010/metrics | grep '^driftguard_model_tier'   # tier="baseline" 1.0
+printf 'artifacts/primary_transformer.joblib' > models/primary_pointer   # restore
+
+# (c) No torch in the serving env -> primary can't load -> baseline still serves (degraded, up):
+uv run uvicorn driftguard.api.main:app --port 8010   # without --extra transformer
+curl -s localhost:8010/ready                          # still 200; runs on the linear baseline
+```
+
+**Green means:** `/ready` never dropped below 200, `/predict` always returned 200, and any
+DistilBERT problem (slow, missing, un-loadable) degraded to the committed linear baseline —
+the operational fallback contract holds with the transformer primary in place.
+
+## 4 · Record the numbers
+Add the measured DistilBERT `accuracy` / `macro_f1` (and the gate outcome) to
+`CASE_STUDY.md`. Real numbers only — no estimates.
