@@ -16,14 +16,25 @@ All numbers below were **measured on this repository** with the committed code a
 
 ## Model quality (frozen test holdout)
 
-| Model                | Accuracy | Macro-F1 |
-|----------------------|----------|----------|
-| Baseline (fallback)  | 0.8958   | 0.8956   |
-| Primary (candidate)  | 0.9199   | 0.9197   |
+| Model                    | Accuracy | Macro-F1 |
+|--------------------------|----------|----------|
+| Baseline (fallback)      | 0.8958   | 0.8956   |
+| Primary (linear TF-IDF)  | 0.9199   | 0.9197   |
+| Primary (DistilBERT)     | 0.9413   | 0.9412   |
 
-**Baseline gate:** the primary clears the gate (0.9197 ≥ 0.8956 + 0.0). With an
+**Baseline gate:** the linear primary clears the gate (0.9197 ≥ 0.8956 + 0.0). With an
 impossible margin (0.5) the same candidate is **blocked** (0.9197 < 1.3956) and the
 `production` alias stayed on the previous version — fail-closed confirmed.
+
+**No-worse-than-incumbent gate (DistilBERT promotion):** DistilBERT
+(`distilbert-base-uncased`, 3 epochs, seed 42, full 108k train rows, RTX 4080 SUPER)
+scored **macro-F1 0.9412** on the frozen holdout. The promotion gate required it to beat
+`max(baseline 0.8956, incumbent primary 0.9197)`, so it was gated against **0.9197**, not
+the baseline — it cleared it (0.9412 ≥ 0.9197, +0.0215) and was promoted. A weaker
+candidate scoring between 0.8956 and 0.9197 would beat the baseline yet be **rejected** as
+a downgrade. The promoted bundle loads, passes its canary self-test, and serves
+predictions; if `torch` is absent or the latency budget is breached, the service degrades
+to the linear baseline unchanged (fallback contract intact).
 
 ## Operational resilience (the fallback contract)
 
