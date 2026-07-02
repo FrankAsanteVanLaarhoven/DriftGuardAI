@@ -343,6 +343,30 @@ status` before every commit and stage *every* file an edit touched, not just the
 - **Baseline gap on embeddings:** MiniLM is so information-dense that even a 10-D projection
   scored ~0.90; a visible incumbent gap required a **3-D** projection (0.838 vs 0.907).
 
+### 6.8 Operational stack robustness (local reproduction)
+
+Standing up the local observability stack (`make stack`) surfaced environment-specific failures,
+each fixed durably in the repository rather than by manual workaround:
+
+- **A `docker` wrapper first on `PATH` injected a `compose` subcommand**, so `docker compose up`
+  became `compose compose` and every stack target failed. *Mitigation:* route the Makefile through
+  the real CLI (`/usr/bin/docker`, overridable via `make stack DOCKER=…`).
+- **Port collisions** (host 8000 and 3000 already bound) made service URLs appear dead. Every
+  compose port is overridable (`DRIFTGUARD_APP_PORT`, `DRIFTGUARD_GRAFANA_PORT`, …), and the demo
+  script now auto-selects a free port and verifies *its own* server came up.
+- **MLflow could not open its sqlite backend** (`unable to open database file`): it runs as a
+  non-root uid but its named volume mounted `/mlflow` root-owned. *Mitigation:* pre-create the
+  backend directory owned by that uid in the image so a fresh named volume inherits writable
+  ownership; give MLflow its own healthcheck (it had inherited the app's, against the wrong port).
+- **A failed `make demo` left the repo broken** by deleting the untracked primary pointer (removed
+  at the fallback step) without restoring it, which then failed the latency-breach test.
+  *Mitigation:* restore the pointer from an `EXIT` trap, unconditionally.
+
+Individually minor, together these illustrate the working discipline: reproduce the failure, fix the
+root cause in-repo, and verify end to end — the full stack now comes up with app, MLflow, Prometheus,
+and Grafana all healthy, and a provisioned **DriftGuard adaptation-governance dashboard** surfaces the
+live serving-tier / fallback / latency-breach metrics alongside the measured recovery/retention.
+
 ---
 
 ## 7 · Outcomes and results
@@ -415,6 +439,7 @@ is exactly what the forgetting-aware gate exists to catch.
 | `artifacts/metrics.json`, `artifacts/metrics_transformer.json` | text primary / DistilBERT quality |
 | `benchmarks/results.json`, `results_streaming.json`, `results_recovery_sweep.json` | benchmark, streaming latency, recovery sweep |
 | `examples/results_tabular.json`, `examples/results_embedding.json` | tabular / embedding instance sweeps |
+| `deploy/monitoring/grafana/dashboards/*.json` | provisioned Grafana dashboards (adaptation governance + service health) |
 | `notebooks/ag_news_drift_demo.ipynb` | executed, plotted demonstration of H1–H3 + generalisation |
 
 Reproduce: `make install && make data && make train && make test`; `make benchmark`,
