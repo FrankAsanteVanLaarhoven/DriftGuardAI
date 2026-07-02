@@ -1,6 +1,7 @@
 {
   "uid": "driftguard-governance",
   "title": "DriftGuard \u2014 Adaptation Governance",
+  "description": "DriftGuard serving-governance and adaptation-safety at a glance: live fallback / tier / latency-breach metrics (top) and the measured recovery-vs-retention and drift-detection results (bottom). Thesis: recovery is not safety.",
   "tags": [
     "driftguard",
     "governance",
@@ -113,7 +114,8 @@
           }
         },
         "overrides": []
-      }
+      },
+      "description": "1 = primary serving normally; flips to BASELINE (red) when the primary is missing, corrupt, or breaching latency \u2014 the operational fallback contract. The service never 5xx's on a bad primary."
     },
     {
       "type": "stat",
@@ -177,7 +179,8 @@
           }
         },
         "overrides": []
-      }
+      },
+      "description": "Cumulative requests the baseline covered because the primary was unavailable. 0 is the healthy steady state."
     },
     {
       "type": "stat",
@@ -241,7 +244,8 @@
           }
         },
         "overrides": []
-      }
+      },
+      "description": "Primary predictions that exceeded the per-request latency budget and were served by the baseline instead."
     },
     {
       "type": "gauge",
@@ -307,7 +311,8 @@
           }
         },
         "overrides": []
-      }
+      },
+      "description": "Share of predictions currently served by the baseline rather than the primary \u2014 a live degradation gauge."
     },
     {
       "type": "timeseries",
@@ -369,7 +374,8 @@
           }
         },
         "overrides": []
-      }
+      },
+      "description": "Prediction throughput split by serving tier (primary vs baseline)."
     },
     {
       "type": "timeseries",
@@ -431,7 +437,8 @@
           }
         },
         "overrides": []
-      }
+      },
+      "description": "95th-percentile end-to-end request latency across the service."
     },
     {
       "type": "timeseries",
@@ -493,7 +500,8 @@
           }
         },
         "overrides": []
-      }
+      },
+      "description": "Total HTTP request throughput."
     },
     {
       "type": "timeseries",
@@ -555,7 +563,8 @@
           }
         },
         "overrides": []
-      }
+      },
+      "description": "Rate of requests falling back to the baseline."
     },
     {
       "type": "timeseries",
@@ -617,7 +626,8 @@
           }
         },
         "overrides": []
-      }
+      },
+      "description": "Rate at which the primary breaches its latency budget."
     },
     {
       "type": "row",

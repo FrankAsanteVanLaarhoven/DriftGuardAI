@@ -1,21 +1,27 @@
 # DriftGuard
 
-**A reproducible benchmark and reference implementation for governed model adaptation
-under distribution shift.** DriftGuard measures whether a model can *safely* adapt to
-drift: detect the shift, retrain, and promote the new model **only when it is provably no
-worse than what is already in production** — quantifying the recovery-vs-forgetting
-trade-off that decides whether adaptation is safe.
+**A model-agnostic governance layer that decides whether a model adapted to distribution shift
+is *safe to promote* — not just whether drift happened.** You can almost always *retrain to
+recover* accuracy on drifted data; the recovered model may also have quietly forgotten the
+distribution production still depends on. **Recovery is not safety.** DriftGuard detects the
+shift, retrains a candidate, and promotes it **only when it is provably no worse than what is
+already in production** — quantifying the recovery-vs-forgetting trade-off that decides whether
+adaptation is safe.
+
+> Monitoring tools tell you drift *happened*. DriftGuard makes the **promotion decision**: an
+> incumbent- and forgetting-aware gate that says whether the adapted model actually ships.
 
 It ships as two layers:
 
-- **The framework (model-agnostic).** Promotion gates and adaptation-safety metrics that
-  operate on scalar quality scores, independent of model type or task: the
-  no-worse-than-incumbent gate, the drift-aware `dual` gate, and the recovery / retention
-  metrics. See [`docs/GOVERNANCE.md`](docs/GOVERNANCE.md).
-- **The reference implementation (one validated instance).** A production-grade,
-  self-healing **text-classification service** on real AG News data — multi-layer drift
-  detection, linear + DistilBERT (macro-F1 **0.9412**) primaries, and a hard fallback
-  contract — that exercises the framework end to end with measured numbers.
+- **The framework (model-agnostic).** Promotion gates and adaptation-safety metrics that operate
+  on scalar quality scores, independent of model type or task — the no-worse-than-incumbent gate,
+  the drift-aware `dual` gate, recovery / retention metrics — plus a pluggable drift-detector
+  interface. See [`docs/GOVERNANCE.md`](docs/GOVERNANCE.md) and [`docs/DETECTORS.md`](docs/DETECTORS.md).
+- **Three validated reference instances**, exercising the framework end to end with measured
+  numbers: **text** (a production-grade self-healing AG News service — multi-layer detection,
+  linear + DistilBERT (macro-F1 **0.9412**) primaries, hard fallback contract), **tabular** (Adult /
+  HistGradientBoosting), and **embeddings** (20 Newsgroups / MiniLM) — all reusing the *same*
+  governance and detector code, unchanged.
 
 Two resilience guarantees sit at the core of the reference service:
 
@@ -122,6 +128,7 @@ companion to the production service in this repo.
   training iterations, **failed approaches + mitigations**, benchmark/metrics, outcomes, lessons.
 - `docs/DEMO_SCRIPT.md` — **a 6–8 min live demo runbook** (pre-flight, commands, talking points,
   Q&A prep, one-page cheat-sheet) for walking a reviewer through the governance story.
+- `docs/DEMO_SLIDES.md` — a **7-slide outline** mirroring the runbook (content · show · say).
 - `CLAUDE.md` — repository conventions and guardrails.
 - `deploy/terraform/README.md` — exact AWS `apply` + `kubeconfig` steps.
 - `docs/DISTILBERT.md` — GPU runbook for the DistilBERT primary (linear model as fallback).
