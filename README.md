@@ -71,12 +71,15 @@ baseline (HTTP 200)**, then flags drift on a shifted sample.
 
 ## Reproducible research demo (educational companion)
 
-A self-contained Jupyter notebook — `notebooks/ag_news_drift_demo.ipynb` — demonstrates
-the core hypotheses with controlled drift experiments on real `fancyzhx/ag_news` data:
+A self-contained Jupyter notebook — `notebooks/ag_news_drift_demo.ipynb` — **executed with all
+figures rendered inline** (styled EDA, confusion matrices, detector scorecards, risk–coverage,
+recovery/retention, and a cross-modality comparison) demonstrates the core hypotheses on real
+`fancyzhx/ag_news` data, plus narrative sections (challenges, insights, limitations, future work):
 
 - **H1** — uncertainty-aware fallback for graceful degradation
 - **H2** — multi-layer text-aware drift detection (the domain classifier catches what PSI misses)
-- **H3** — the closed self-healing loop (detect → retrain → baseline gate → promote)
+- **H3** — the closed self-healing loop (detect → retrain → gate → promote), and *recovery ≠ safety*
+- **G** — the same governance generalising across text, tabular, and embedding instances
 
 **Quick start:** open it in **Colab** or **Kaggle** (CPU-only, ~2 min), or locally:
 
@@ -101,6 +104,8 @@ companion to the production service in this repo.
   model families and data types, one governance layer.
 - `ARCHITECTURE.md` — the closed loop and the two-sense fallback contract.
 - `CASE_STUDY.md` — measured numbers (model quality, PSI, resilience, infra checks).
+- `docs/MANUSCRIPT.md` — **the full research write-up**: methods, environments/setups,
+  training iterations, **failed approaches + mitigations**, benchmark/metrics, outcomes, lessons.
 - `CLAUDE.md` — repository conventions and guardrails.
 - `deploy/terraform/README.md` — exact AWS `apply` + `kubeconfig` steps.
 - `docs/DISTILBERT.md` — GPU runbook for the DistilBERT primary (linear model as fallback).
