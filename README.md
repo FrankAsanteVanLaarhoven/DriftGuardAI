@@ -120,6 +120,8 @@ companion to the production service in this repo.
 - `CASE_STUDY.md` — measured numbers (model quality, PSI, resilience, infra checks).
 - `docs/MANUSCRIPT.md` — **the full research write-up**: methods, environments/setups,
   training iterations, **failed approaches + mitigations**, benchmark/metrics, outcomes, lessons.
+- `docs/DEMO_SCRIPT.md` — **a 6–8 min live demo runbook** (pre-flight, commands, talking points,
+  Q&A prep, one-page cheat-sheet) for walking a reviewer through the governance story.
 - `CLAUDE.md` — repository conventions and guardrails.
 - `deploy/terraform/README.md` — exact AWS `apply` + `kubeconfig` steps.
 - `docs/DISTILBERT.md` — GPU runbook for the DistilBERT primary (linear model as fallback).
