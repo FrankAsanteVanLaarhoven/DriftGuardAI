@@ -107,7 +107,7 @@ companion to the production service in this repo.
 - `benchmarks/README.md` — drift-injection benchmark, severity sweep, and closed-loop recovery.
 
 ```
-src/driftguard/{config,data,train,gate,drift,registry,api/}  tests/  pipelines/
+src/driftguard/{config,data,train,gate,governance,drift,textdrift,registry,detectors/,api/}  tests/  pipelines/
 deploy/{k8s,terraform,ansible,monitoring}  Dockerfile  docker-compose.yml  Jenkinsfile
 models/baseline.joblib  artifacts/{metrics,baseline_metrics,reference}.json
 ```
