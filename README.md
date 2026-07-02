@@ -93,6 +93,8 @@ companion to the production service in this repo.
 ## Docs & layout
 - `docs/GOVERNANCE.md` — **the model-agnostic framework**: promotion gates + adaptation-
   safety metrics, and how to instantiate them for a non-text model.
+- `docs/DETECTORS.md` — **the pluggable drift-detector interface** (PSI / domain-classifier /
+  composite), reused across text, tabular, and embeddings with no new detector code.
 - `examples/` — **reference instances** proving the framework generalises: a **tabular**
   model on OpenML Adult (`make example-tabular`) reuses the same gates + metrics as text.
 - `ARCHITECTURE.md` — the closed loop and the two-sense fallback contract.

@@ -77,31 +77,6 @@ def covariate_drift(X, severity: float = 0.6):
     return Xd
 
 
-def psi_numeric(ref, cur, bins: int = 10, eps: float = 1e-6) -> float:
-    edges = np.quantile(ref, np.linspace(0, 1, bins + 1))
-    edges[0], edges[-1] = -np.inf, np.inf
-    r = np.histogram(ref, edges)[0] / max(len(ref), 1) + eps
-    c = np.histogram(cur, edges)[0] / max(len(cur), 1) + eps
-    return float(np.sum((c - r) * np.log(c / r)))
-
-
-def domain_auc(ref_X, cur_X) -> float:
-    """Reference-vs-current separability on numeric features — the same domain-classifier
-    drift idea as the text detector, with a tabular featurizer."""
-    from sklearn.ensemble import HistGradientBoostingClassifier
-    from sklearn.model_selection import StratifiedKFold, cross_val_score
-
-    num = ref_X.select_dtypes(include="number").columns
-    n = min(len(ref_X), len(cur_X))
-    a = ref_X[num].sample(n, random_state=SEED).to_numpy()
-    b = cur_X[num].sample(n, random_state=SEED).to_numpy()
-    xx = np.vstack([a, b])
-    yy = np.array([0] * n + [1] * n)
-    cv = StratifiedKFold(n_splits=3, shuffle=True, random_state=SEED)
-    clf = HistGradientBoostingClassifier(max_iter=80, random_state=SEED)
-    return float(np.mean(cross_val_score(clf, xx, yy, cv=cv, scoring="roc_auc")))
-
-
 def run(severity: float = 0.6) -> dict:
     from sklearn.model_selection import train_test_split
 
@@ -117,10 +92,23 @@ def run(severity: float = 0.6) -> dict:
     Xtr_d, Xte_d = covariate_drift(Xtr, severity), covariate_drift(Xte, severity)
     stale_drift = macro_f1(primary, Xte_d, yte)
 
-    # --- detect (tabular multi-layer: PSI on a feature + domain classifier) ------------
-    psi = psi_numeric(Xte["hours-per-week"].to_numpy(), Xte_d["hours-per-week"].to_numpy())
-    auc = domain_auc(Xte, Xte_d)
-    detected = psi > 0.2 or auc >= 0.75
+    # --- detect (multi-layer) with the SHARED driftguard.detectors package -------------
+    # Same detector classes the text service uses — only the extractor/estimator differ.
+    from sklearn.ensemble import HistGradientBoostingClassifier
+
+    from driftguard.detectors import CompositeDetector, DomainClassifierDetector, PSIDetector
+
+    num_cols = Xte.select_dtypes(include="number").columns.tolist()
+    detector = CompositeDetector([
+        PSIDetector(values_fn=lambda df: df["hours-per-week"].to_numpy(), threshold=0.2),
+        DomainClassifierDetector(
+            estimator=HistGradientBoostingClassifier(max_iter=80, random_state=SEED),
+            threshold=0.75),
+    ], rule="any").fit(Xte[num_cols])
+    det = detector.detect(Xte_d[num_cols])
+    psi = det.extra["signals"]["psi"]["statistic"]
+    auc = det.extra["signals"]["domain_classifier"]["statistic"]
+    detected = det.drift
 
     # --- retrain a candidate on the drifted data, then score both holdouts -------------
     candidate = build_pipeline("primary", Xtr_d).fit(Xtr_d, ytr)

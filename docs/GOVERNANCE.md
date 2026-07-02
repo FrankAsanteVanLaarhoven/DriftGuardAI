@@ -50,9 +50,10 @@ retention collapses (see [`../benchmarks/README.md`](../benchmarks/README.md) an
 To govern a different model/task you supply three things; the gates and metrics are reused
 verbatim:
 
-1. **A drift detector** — anything that flags distribution shift on your inputs (the text
-   reference uses PSI on token counts + a domain classifier; a tabular model might use
-   PSI on features or an MMD test on embeddings).
+1. **A drift detector** — from the pluggable `driftguard.detectors` package
+   ([`docs/DETECTORS.md`](DETECTORS.md)): configure `PSIDetector` / `DomainClassifierDetector`
+   with a `values_fn` or an `estimator` for your modality (text, tabular, embeddings) —
+   no new detector code.
 2. **A holdout scorer** — a function returning a scalar quality metric on fixed and
    drift-refreshed holdouts.
 3. **A retrain step** — produces a candidate from freshly labelled data.

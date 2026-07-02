@@ -16,9 +16,11 @@ make example-tabular          # or: uv run python examples/tabular_adult.py
 ```
 
 Trains a gradient-boosting income classifier, injects covariate drift on numeric features,
-detects it (PSI on a feature + a domain classifier), retrains, and feeds the resulting
-scores to `driftguard.governance` — the *same* `incumbent_gate`, `promotion_gate`,
-`recovery_ratio`, and `retention_ratio` the text service uses. Writes `results_tabular.json`.
+detects it with the shared `driftguard.detectors` (`PSIDetector` + `DomainClassifierDetector`,
+the same classes text uses — see [`docs/DETECTORS.md`](../docs/DETECTORS.md)), retrains, and
+feeds the resulting scores to `driftguard.governance` — the *same* `incumbent_gate`,
+`promotion_gate`, `recovery_ratio`, and `retention_ratio` the text service uses. Writes
+`results_tabular.json`.
 
 Measured (macro-F1; clean holdout: baseline 0.783, primary 0.819):
 
