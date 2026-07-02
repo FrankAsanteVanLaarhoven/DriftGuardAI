@@ -38,6 +38,10 @@ from driftguard import drift, registry, textdrift  # noqa: E402
 from driftguard.config import get_settings  # noqa: E402
 from driftguard.data import load_split  # noqa: E402
 
+# Adaptation-safety metrics live in the model-agnostic governance layer; re-exported here
+# so `from closed_loop import recovery_ratio` keeps working.
+from driftguard.governance import recovery_ratio, retention_ratio  # noqa: E402,F401
+
 
 def _tok_hash(word: str) -> int:
     return int(hashlib.md5(word.encode()).hexdigest(), 16) % 100
@@ -51,19 +55,6 @@ def vocab_drift(text: str, p: float) -> str:
 
 def _macro_f1(pipeline, texts: list[str], labels: list[int]) -> float:
     return float(f1_score(labels, pipeline.predict(texts), average="macro"))
-
-
-def recovery_ratio(cand_drift_f1: float, stale_drift_f1: float, orig_clean_f1: float) -> float:
-    """Fraction of the drift-induced accuracy loss the candidate regains on the *new*
-    distribution. 1.0 = fully restored to the pre-drift clean level; 0.0 = no recovery."""
-    denom = orig_clean_f1 - stale_drift_f1
-    return (cand_drift_f1 - stale_drift_f1) / denom if denom > 1e-9 else 0.0
-
-
-def retention_ratio(cand_fixed_f1: float, stale_fixed_f1: float) -> float:
-    """Old-distribution performance kept after adapting (catastrophic-forgetting guard).
-    1.0 = no forgetting; lower = more of the original distribution given up."""
-    return cand_fixed_f1 / stale_fixed_f1 if stale_fixed_f1 > 1e-9 else 0.0
 
 
 def run(p: float = 0.7, window: int = 600, seed: int = 42,

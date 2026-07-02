@@ -3,8 +3,10 @@
 Conventions and guardrails for anyone (human or coding agent) working in this repo.
 
 ## What this is
-DriftGuard: a self-healing text-classification service. Read `ARCHITECTURE.md` for the
-design and `CASE_STUDY.md` for measured results.
+DriftGuard: a model-agnostic framework for governed model adaptation under distribution
+shift, validated by a self-healing text-classification reference service. Read
+`docs/GOVERNANCE.md` for the framework, `ARCHITECTURE.md` for the design, and
+`CASE_STUDY.md` for measured results.
 
 ## Golden rules
 1. **Never break the fallback contract.** `/health`, `/ready`, `/predict`,

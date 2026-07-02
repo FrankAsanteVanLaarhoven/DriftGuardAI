@@ -116,6 +116,9 @@ def incumbent_gate(candidate_macro_f1: float, baseline_macro_f1: float,
     candidate beats the tiny baseline but is *worse* than the model already serving —
     e.g. a slow transformer that scores below the incumbent linear primary. With no
     incumbent (fresh deploy) it degrades exactly to :func:`baseline_gate`.
+
+    Model-agnostic: the arguments are any scalar holdout metric (macro-F1 in this
+    reference implementation). Re-exported by the :mod:`driftguard.governance` framework.
     """
     bar, source = effective_promotion_bar(baseline_macro_f1, incumbent_macro_f1)
     threshold = bar + margin

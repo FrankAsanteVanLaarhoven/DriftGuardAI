@@ -73,6 +73,17 @@ def test_effective_promotion_bar_picks_the_higher_reference():
     assert registry.effective_promotion_bar(0.8956, None) == (0.8956, "baseline")
 
 
+def test_governance_layer_is_model_agnostic():
+    from driftguard import governance
+
+    # Gates are re-exported and operate on scalar scores (no model/task knowledge).
+    assert governance.incumbent_gate(0.94, 0.8956, 0.9197).passed is True
+    assert governance.incumbent_gate(0.91, 0.8956, 0.9197).passed is False
+    # Adaptation-safety metrics on generic scores.
+    assert abs(governance.recovery_ratio(0.9170, 0.8344, 0.9197) - 0.9683) < 1e-3
+    assert governance.retention_ratio(0.9197, 0.9197) == 1.0
+
+
 def test_promotion_gate_fixed_matches_baseline_gate():
     d = registry.promotion_gate(candidate_fixed_f1=0.89, baseline_fixed_f1=0.90, mode="fixed")
     assert d.mode == "fixed"

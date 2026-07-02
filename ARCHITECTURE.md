@@ -1,9 +1,11 @@
 # DriftGuard architecture
 
-DriftGuard is a text-classification service (AG News topics) engineered around one
-principle: **a bad model must never take the service down, and a worse model must
-never reach production.** Two baselines enforce this — one operational, one
-evaluative.
+DriftGuard is a framework for **governed model adaptation under distribution shift**,
+validated by a text-classification reference service (AG News topics). It is engineered
+around one principle: **a bad model must never take the service down, and a worse model
+must never reach production.** Two baselines enforce this — one operational, one
+evaluative — and the model-agnostic governance layer ([`docs/GOVERNANCE.md`](docs/GOVERNANCE.md))
+generalises the evaluative half beyond text.
 
 ## The closed loop
 

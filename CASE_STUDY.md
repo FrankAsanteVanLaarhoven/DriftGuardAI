@@ -1,8 +1,15 @@
 # DriftGuard case study — measured results
 
+This is the **text-classification reference implementation** validating DriftGuard's
+model-agnostic governance framework (see [`docs/GOVERNANCE.md`](docs/GOVERNANCE.md)). The
+gates and adaptation-safety metrics measured below are task-independent; AG News is the
+instance that exercises them end to end. Read the promotion-gate, recovery, and retention
+numbers as evidence that the *framework* behaves correctly — text is where it is proven.
+
 All numbers below were **measured on this repository** with the committed code and
-`fancyzhx/ag_news`, seed 42, on CPU. They are reproducible with `make train`,
-`make test`, `make stack`, and `make demo`. Nothing here is estimated.
+`fancyzhx/ag_news`, seed 42 (DistilBERT on GPU; everything else CPU). They are reproducible
+with `make train`, `make test`, `make train-transformer`, `make recovery-sweep`,
+`make stack`, and `make demo`. Nothing here is estimated.
 
 ## Dataset (fixed, seeded, DVC-versioned)
 

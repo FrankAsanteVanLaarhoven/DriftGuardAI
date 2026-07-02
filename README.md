@@ -1,20 +1,33 @@
 # DriftGuard
 
-A production-grade, **self-healing text-classification service**. It classifies news
-text into AG News topics (World / Sports / Business / Sci/Tech), detects data drift,
-and retrains safely behind a human gate — while **never going down because of a bad
-primary model**.
+**A reproducible benchmark and reference implementation for governed model adaptation
+under distribution shift.** DriftGuard measures whether a model can *safely* adapt to
+drift: detect the shift, retrain, and promote the new model **only when it is provably no
+worse than what is already in production** — quantifying the recovery-vs-forgetting
+trade-off that decides whether adaptation is safe.
 
-Two resilience guarantees sit at the core:
+It ships as two layers:
+
+- **The framework (model-agnostic).** Promotion gates and adaptation-safety metrics that
+  operate on scalar quality scores, independent of model type or task: the
+  no-worse-than-incumbent gate, the drift-aware `dual` gate, and the recovery / retention
+  metrics. See [`docs/GOVERNANCE.md`](docs/GOVERNANCE.md).
+- **The reference implementation (one validated instance).** A production-grade,
+  self-healing **text-classification service** on real AG News data — multi-layer drift
+  detection, linear + DistilBERT (macro-F1 **0.9412**) primaries, and a hard fallback
+  contract — that exercises the framework end to end with measured numbers.
+
+Two resilience guarantees sit at the core of the reference service:
 
 - **Operational fallback.** A tiny, dependency-light baseline model
   (`models/baseline.joblib`) is committed in the image and guaranteed to load. The
   service always tries the **primary** first; if the primary is missing, corrupt,
   fails its startup self-test, or throws at inference time, the service **serves the
   baseline and stays up**. It never 5xx's or fails readiness because of a bad primary.
-- **Evaluative baseline gate.** A candidate model is only promoted if it beats the
-  committed baseline on a fixed holdout by a configurable margin. CI and the retrain
-  pipeline **fail closed** — a regression is never promoted.
+- **Evaluative gate (no-worse-than-incumbent).** A candidate is promoted only if it beats
+  **`max(baseline, incumbent primary)`** on a holdout by a configurable margin — never the
+  tiny baseline alone. CI and the retrain pipeline **fail closed**; a regression *or a
+  downgrade* is never promoted.
 
 ## Quick start (local)
 
@@ -78,6 +91,8 @@ failure cases (e.g. PSI blindness on semantic drift). It is the lightweight *res
 companion to the production service in this repo.
 
 ## Docs & layout
+- `docs/GOVERNANCE.md` — **the model-agnostic framework**: promotion gates + adaptation-
+  safety metrics, and how to instantiate them for a non-text model.
 - `ARCHITECTURE.md` — the closed loop and the two-sense fallback contract.
 - `CASE_STUDY.md` — measured numbers (model quality, PSI, resilience, infra checks).
 - `CLAUDE.md` — repository conventions and guardrails.
