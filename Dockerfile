@@ -30,6 +30,11 @@ COPY src ./src
 COPY models ./models
 COPY artifacts ./artifacts
 
+# MLflow (shares this image) stores its sqlite backend under /mlflow. Pre-create it owned by the
+# unprivileged uid so a fresh named volume mounted there inherits writable ownership — otherwise
+# the non-root server cannot open the database file.
+RUN mkdir -p /mlflow && chown 10001:10001 /mlflow
+
 USER 10001
 EXPOSE 8000
 
