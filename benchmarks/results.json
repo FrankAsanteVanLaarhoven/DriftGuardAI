@@ -1,7 +1,7 @@
 {
   "seeds": 5,
   "window": 600,
-  "mean_detection_rate_on_drift": 0.8,
+  "mean_detection_rate_on_drift": 0.7142857142857143,
   "false_positive_rate_no_drift": 0.0,
   "rows": [
     {
@@ -63,6 +63,58 @@
       "fired_psi": 0,
       "fired_domain": 0,
       "n_seeds": 5
+    },
+    {
+      "kind": "char_noise",
+      "is_drift": true,
+      "detection_rate": 0.0,
+      "mean_psi": 0.014510478968821346,
+      "mean_domain_auc": 0.7197805555555555,
+      "fired_psi": 0,
+      "fired_domain": 0,
+      "n_seeds": 5
+    },
+    {
+      "kind": "token_dropout",
+      "is_drift": true,
+      "detection_rate": 1.0,
+      "mean_psi": 3.3188408539318166,
+      "mean_domain_auc": 0.6928444444444444,
+      "fired_psi": 5,
+      "fired_domain": 0,
+      "n_seeds": 5
     }
-  ]
+  ],
+  "detector_scorecard": {
+    "psi": {
+      "precision": 1.0,
+      "recall": 0.2857142857142857,
+      "f1": 0.4444444444444445,
+      "fpr": 0.0,
+      "tp": 10,
+      "fp": 0,
+      "fn": 25,
+      "tn": 5
+    },
+    "domain_classifier": {
+      "precision": 1.0,
+      "recall": 0.5714285714285714,
+      "f1": 0.7272727272727273,
+      "fpr": 0.0,
+      "tp": 20,
+      "fp": 0,
+      "fn": 15,
+      "tn": 5
+    },
+    "composite": {
+      "precision": 1.0,
+      "recall": 0.7142857142857143,
+      "f1": 0.8333333333333333,
+      "fpr": 0.0,
+      "tp": 25,
+      "fp": 0,
+      "fn": 10,
+      "tn": 5
+    }
+  }
 }

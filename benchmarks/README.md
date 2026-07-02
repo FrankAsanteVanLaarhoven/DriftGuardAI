@@ -5,20 +5,26 @@ controlled, seeded drift generators to the AG News test pool and scores the comp
 detector (PSI + domain-classifier) on each.
 
 ```bash
-make benchmark            # 5 seeds, window 600
+make benchmark            # 5 seeds, window 600 (per-kind table + per-detector scorecard)
+make benchmark-sweep      # gradual_topic severity -> detection boundary
+make benchmark-stream     # streaming detection latency across temporal patterns
 uv run python benchmarks/eval_harness.py --seeds 10 --window 800
 ```
 
 - `drift_generators.py` — Garcia-style generators: `no_drift` (FPR control),
   `length_truncate` (token-count shift), `class_prior_shift`, `adjective_swap`,
-  `semantic_replace`, `gradual_topic`.
+  `semantic_replace`, `gradual_topic`, `char_noise` (typo/OCR corruption),
+  `token_dropout` (degraded/truncated input).
 - `eval_harness.py` — runs each kind across seeds, records detection rate, which
-  detector fired, and mean PSI / domain-AUC; writes `results.json` and a Markdown
-  table.
+  detector fired, mean PSI / domain-AUC, **and a per-detector precision/recall/F1/FPR
+  scorecard**; writes `results.json` and a Markdown table.
+- `streaming.py` — builds a temporal stream with a change point (abrupt / gradual /
+  incremental / recurring, per Gama et al. 2014) and measures **detection latency**,
+  missed-detection rate, and pre-change false-alarm rate; writes `results_streaming.json`.
 
 ## Latest measured run (5 seeds, window 600)
 
-Mean detection on genuine drift = **0.80**; false-positive rate on `no_drift` = **0.00**.
+Mean detection on genuine drift = **0.71**; false-positive rate on `no_drift` = **0.00**.
 
 | drift kind        | detection | mean PSI | mean domain AUC | PSI fired | domain fired |
 |-------------------|-----------|----------|-----------------|-----------|--------------|
@@ -28,13 +34,29 @@ Mean detection on genuine drift = **0.80**; false-positive rate on `no_drift` = 
 | adjective_swap    | 1.00      | 0.0130   | 0.9978          | 0/5       | 5/5          |
 | semantic_replace  | 1.00      | 0.0130   | 1.0000          | 0/5       | 5/5          |
 | gradual_topic     | 0.00      | 0.0130   | 0.7182          | 0/5       | 0/5          |
+| char_noise        | 0.00      | 0.0145   | 0.7198          | 0/5       | 0/5          |
+| token_dropout     | 1.00      | 3.3188   | 0.6928          | 5/5       | 0/5          |
 
-**Reading it.** PSI only fires on the length shift; every *semantic* category is
-carried by the domain classifier — exactly the multi-layer value. `no_drift` produces
-zero false positives. The one miss, `gradual_topic` at 40% injection, sits just under
-the 0.75 AUC threshold (0.7182): partial/gradual drift is the genuinely hard case, and
-it is caught at higher injection severity or a lower threshold — at some false-positive
-cost. This trade-off is exactly what the benchmark exists to quantify.
+**Reading it.** PSI fires only on token-count shifts (`length_truncate`, `token_dropout`);
+every *semantic* category is carried by the domain classifier — exactly the multi-layer
+value. `no_drift` produces zero false positives. Two misses sit just under the 0.75 AUC
+gate: `gradual_topic` at 40% injection (0.7182) and `char_noise` at its mild default
+severity 0.1 (0.7198) — partial/mild drift is the genuinely hard case, caught at higher
+severity or a lower threshold, at some false-positive cost. That trade-off is exactly
+what the benchmark quantifies.
+
+### Per-detector scorecard (ground truth = `is_drift`, over every kind × seed)
+
+| detector          | precision | recall | F1   | FPR  |
+|-------------------|-----------|--------|------|------|
+| psi               | 1.00      | 0.29   | 0.44 | 0.00 |
+| domain_classifier | 1.00      | 0.57   | 0.73 | 0.00 |
+| **composite**     | 1.00      | **0.71** | **0.83** | 0.00 |
+
+The multi-layer detector more than **doubles recall over PSI alone (0.29 → 0.71) at zero
+false-positive cost**. Both single detectors are perfectly precise (no false alarms);
+the composite `any`-rule simply unions their coverage. This is the headline number for
+"the domain classifier catches what PSI misses", now quantified.
 
 ## Detection boundary: `gradual_topic` severity sweep
 
@@ -58,6 +80,26 @@ default threshold. PSI stays flat at 0.0168 across the whole sweep: token-count 
 structurally blind to topic injection that preserves length. Lowering the AUC gate
 shifts the boundary left (earlier detection) at a false-positive cost — a deliberate,
 now-quantified operating-point choice.
+
+## Streaming detection latency (`make benchmark-stream`)
+
+`streaming.py` runs the composite detector over a stream of windows with a change point
+at window 6, across the four canonical temporal drift patterns (Gama et al. 2014).
+Measured run (`semantic_replace`, 16 windows, window 400, 3 seeds):
+
+| pattern     | detection delay (windows) | missed rate | false-alarm rate (pre-change) | post-change detection |
+|-------------|---------------------------|-------------|-------------------------------|-----------------------|
+| abrupt      | 0.00                      | 0.00        | 0.000                         | 1.00                  |
+| gradual     | 1.33                      | 0.00        | 0.000                         | 0.77                  |
+| incremental | 0.00                      | 0.00        | 0.000                         | 1.00                  |
+| recurring   | 0.00                      | 0.00        | 0.000                         | 0.60                  |
+
+**Reading it.** The detector fires **within one window** of an abrupt or incremental
+change, lags by ~1.3 windows on gradual drift (it must accumulate enough drifted traffic
+to separate), and **never raises a pre-change false alarm** on any pattern. `recurring`'s
+0.60 post-change detection is by design — drift comes and goes in blocks, so only the
+drifted blocks should (and do) fire. Delay is the streaming metric the static per-window
+benchmark cannot express.
 
 ## Closed-loop recovery (`make recovery`)
 

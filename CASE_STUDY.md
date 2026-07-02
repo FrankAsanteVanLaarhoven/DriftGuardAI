@@ -83,7 +83,7 @@ reproducible case for multi-layer, text-aware drift detection.
 ### Drift-injection benchmark (`make benchmark`, 5 seeds, window 600)
 
 Controlled generators (Garcia-style) scored by the composite detector. **Mean
-detection on genuine drift = 0.80; false-positive rate on `no_drift` = 0.00.**
+detection on genuine drift = 0.71; false-positive rate on `no_drift` = 0.00.**
 
 | drift kind        | detection | mean PSI | mean domain AUC | PSI fired | domain fired |
 |-------------------|-----------|----------|-----------------|-----------|--------------|
@@ -93,13 +93,41 @@ detection on genuine drift = 0.80; false-positive rate on `no_drift` = 0.00.**
 | adjective_swap    | 1.00      | 0.0130   | 0.9978          | 0/5       | 5/5          |
 | semantic_replace  | 1.00      | 0.0130   | 1.0000          | 0/5       | 5/5          |
 | gradual_topic     | 0.00      | 0.0130   | 0.7182          | 0/5       | 0/5          |
+| char_noise        | 0.00      | 0.0145   | 0.7198          | 0/5       | 0/5          |
+| token_dropout     | 1.00      | 3.3188   | 0.6928          | 5/5       | 0/5          |
 
-PSI alone fires only on the length shift; every semantic category is carried by the
-domain classifier. Zero false positives on in-distribution windows. The single miss,
-`gradual_topic` at 40% injection (AUC 0.7182, just under the 0.75 threshold), is the
-honest hard case — partial/gradual drift is caught at higher severity or a lower
-threshold, at some false-positive cost. This is exactly the trade-off the benchmark
-quantifies rather than hides.
+PSI fires only on token-count shifts (`length_truncate`, `token_dropout`); every
+semantic category is carried by the domain classifier. Zero false positives on
+in-distribution windows. Two misses sit just under the 0.75 gate — `gradual_topic` at
+40% injection (0.7182) and `char_noise` at mild severity 0.1 (0.7198) — the honest hard
+cases, caught at higher severity or a lower threshold at some false-positive cost.
+
+**Per-detector scorecard (over every kind × seed), source: `benchmarks/results.json`:**
+
+| detector          | precision | recall   | F1       | FPR  |
+|-------------------|-----------|----------|----------|------|
+| psi               | 1.00      | 0.29     | 0.44     | 0.00 |
+| domain_classifier | 1.00      | 0.57     | 0.73     | 0.00 |
+| **composite**     | 1.00      | **0.71** | **0.83** | 0.00 |
+
+The multi-layer detector **more than doubles recall over PSI alone (0.29 → 0.71) at zero
+false-positive cost** — the quantified headline for "the domain classifier catches what
+PSI misses".
+
+**Streaming detection latency (`make benchmark-stream`), source:
+`benchmarks/results_streaming.json`.** Composite detector over a stream with a change
+point at window 6, across the Gama et al. (2014) taxonomy — **zero pre-change false
+alarms on every pattern**:
+
+| pattern     | detection delay (windows) | missed rate | pre-change false alarms | post-change detection |
+|-------------|---------------------------|-------------|-------------------------|-----------------------|
+| abrupt      | 0.00                      | 0.00        | 0.000                   | 1.00                  |
+| gradual     | 1.33                      | 0.00        | 0.000                   | 0.77                  |
+| incremental | 0.00                      | 0.00        | 0.000                   | 1.00                  |
+| recurring   | 0.00                      | 0.00        | 0.000                   | 0.60                  |
+
+Fires within one window of an abrupt/incremental change, lags ~1.3 windows on gradual
+drift, and never false-alarms before the change point.
 
 **Detection boundary (`make benchmark-sweep`, gradual_topic, 5 seeds).** The
 domain-classifier AUC rises monotonically with injection fraction and crosses the 0.75

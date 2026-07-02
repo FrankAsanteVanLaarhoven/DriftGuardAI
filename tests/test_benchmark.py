@@ -66,3 +66,43 @@ def test_vocab_concept_drift_transform_is_deterministic():
     assert len(a.split()) == len(text.split())
     assert "_v2" in a                  # some tokens acquired the new surface form
     assert vocab_drift(text, p=0.0) == text   # p=0 is a no-op
+
+
+def test_new_families_are_detected():
+    settings = get_settings()
+    pool = _pool()
+    reference = textdrift.load_reference_texts(settings)
+    ref_dist = drift.load_reference(settings)
+
+    noisy = gen.char_noise(pool, 200, random.Random(2), severity=0.2)
+    assert textdrift.composite_drift(noisy, reference, ref_dist, settings)["drift"] is True
+
+    dropped = gen.token_dropout(pool, 200, random.Random(2), severity=0.5)
+    assert textdrift.composite_drift(dropped, reference, ref_dist, settings)["drift"] is True
+
+
+def test_detector_scorecard_composite_is_a_superset_of_psi():
+    _pool()  # ensure data / skip otherwise
+    from eval_harness import run
+
+    summary = run(seeds=1, window=150)
+    sc = summary["detector_scorecard"]
+    assert set(sc) == {"psi", "domain_classifier", "composite"}
+    # Composite = PSI OR domain, so it never recalls less than either single detector.
+    assert sc["composite"]["recall"] >= sc["psi"]["recall"]
+    assert sc["composite"]["recall"] >= sc["domain_classifier"]["recall"]
+    # The domain classifier carries real signal (catches semantic kinds PSI misses).
+    assert sc["domain_classifier"]["recall"] > 0.0
+
+
+def test_streaming_abrupt_change_is_detected_quickly():
+    _pool()
+    from streaming import run
+
+    result = run(kind="semantic_replace", n_windows=6, change_point=2, window=150,
+                 seeds=1, band=3, patterns=("abrupt",))
+    row = result["patterns"][0]
+    assert row["pattern"] == "abrupt"
+    assert row["missed_detection_rate"] == 0.0
+    assert row["detection_delay_windows"] is not None
+    assert row["detection_delay_windows"] <= 2  # abrupt full-severity => fast alarm

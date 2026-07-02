@@ -1,0 +1,44 @@
+{
+  "kind": "semantic_replace",
+  "n_windows": 16,
+  "change_point": 6,
+  "window": 400,
+  "seeds": 3,
+  "band": 6,
+  "max_severity": 0.6,
+  "detection_delay_unit": "windows after change point",
+  "patterns": [
+    {
+      "pattern": "abrupt",
+      "detection_delay_windows": 0,
+      "missed_detection_rate": 0,
+      "false_alarm_rate_prechange": 0.0,
+      "post_change_detection_rate": 1.0,
+      "n_detected_seeds": 3
+    },
+    {
+      "pattern": "gradual",
+      "detection_delay_windows": 1.33,
+      "missed_detection_rate": 0,
+      "false_alarm_rate_prechange": 0.0,
+      "post_change_detection_rate": 0.77,
+      "n_detected_seeds": 3
+    },
+    {
+      "pattern": "incremental",
+      "detection_delay_windows": 0,
+      "missed_detection_rate": 0,
+      "false_alarm_rate_prechange": 0.0,
+      "post_change_detection_rate": 1.0,
+      "n_detected_seeds": 3
+    },
+    {
+      "pattern": "recurring",
+      "detection_delay_windows": 0,
+      "missed_detection_rate": 0,
+      "false_alarm_rate_prechange": 0.0,
+      "post_change_detection_rate": 0.6,
+      "n_detected_seeds": 3
+    }
+  ]
+}

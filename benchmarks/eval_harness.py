@@ -29,13 +29,34 @@ from driftguard.config import get_settings  # noqa: E402
 from driftguard.data import load_split  # noqa: E402
 
 
+def _score(records: list[dict], detector: str) -> dict:
+    """Precision/recall/F1/FPR for one detector, treating IS_DRIFT as ground truth."""
+    tp = fp = fn = tn = 0
+    for r in records:
+        pred, truth = r[detector], r["is_drift"]
+        if truth and pred:
+            tp += 1
+        elif truth and not pred:
+            fn += 1
+        elif pred:
+            fp += 1
+        else:
+            tn += 1
+    precision = tp / (tp + fp) if (tp + fp) else 0.0
+    recall = tp / (tp + fn) if (tp + fn) else 0.0
+    f1 = 2 * precision * recall / (precision + recall) if (precision + recall) else 0.0
+    fpr = fp / (fp + tn) if (fp + tn) else 0.0
+    return {"precision": precision, "recall": recall, "f1": f1, "fpr": fpr,
+            "tp": tp, "fp": fp, "fn": fn, "tn": tn}
+
+
 def run(seeds: int = 5, window: int = 600) -> dict:
     settings = get_settings()
     reference_texts = textdrift.load_reference_texts(settings)
     reference_dist = drift.load_reference(settings)
     pool = load_split("test", settings)  # labelled base corpus
 
-    rows = []
+    rows, records = [], []
     for kind, fn in gen.GENERATORS.items():
         detections, psis, aucs, attributions = [], [], [], []
         for s in range(seeds):
@@ -46,6 +67,12 @@ def run(seeds: int = 5, window: int = 600) -> dict:
             psis.append(result["signals"]["psi"]["value"])
             aucs.append(result["signals"]["domain_classifier"]["auc"])
             attributions.extend(result["triggered_by"])
+            records.append({
+                "is_drift": gen.IS_DRIFT[kind],
+                "psi": result["signals"]["psi"]["drift"],
+                "domain_classifier": result["signals"]["domain_classifier"]["drift"],
+                "composite": result["drift"],
+            })
         n = len(detections)
         rows.append({
             "kind": kind,
@@ -68,6 +95,9 @@ def run(seeds: int = 5, window: int = 600) -> dict:
             statistics.mean(r["detection_rate"] for r in fpr_rows) if fpr_rows else 0.0
         ),
         "rows": rows,
+        "detector_scorecard": {
+            det: _score(records, det) for det in ("psi", "domain_classifier", "composite")
+        },
     }
     return summary
 
@@ -129,6 +159,19 @@ def to_markdown(summary: dict) -> str:
             f"{r['mean_psi']:.4f} | {r['mean_domain_auc']:.4f} | "
             f"{r['fired_psi']}/{r['n_seeds']} | {r['fired_domain']}/{r['n_seeds']} |"
         )
+    sc = summary.get("detector_scorecard")
+    if sc:
+        lines += [
+            "",
+            "Per-detector scorecard (ground truth = is_drift, over every kind × seed):",
+            "",
+            "| detector | precision | recall | F1 | FPR |",
+            "|---|---|---|---|---|",
+        ]
+        for det in ("psi", "domain_classifier", "composite"):
+            d = sc[det]
+            lines.append(f"| {det} | {d['precision']:.2f} | {d['recall']:.2f} | "
+                         f"{d['f1']:.2f} | {d['fpr']:.2f} |")
     return "\n".join(lines)
 
 

@@ -12,6 +12,8 @@ Kinds:
     adjective_swap      replace a fraction of tokens with a disjoint "modifier" vocab
     semantic_replace    replace a large fraction of tokens with a disjoint vocabulary
     gradual_topic       inject an increasing fraction of foreign-vocabulary documents
+    char_noise          character-level typo/OCR corruption (insert/delete/substitute)
+    token_dropout       drop a fraction of tokens (truncated/degraded logging input)
 """
 
 from __future__ import annotations
@@ -91,6 +93,42 @@ def gradual_topic(pool: pd.DataFrame, n: int, rng: random.Random,
     return out
 
 
+def _corrupt_chars(text: str, sev: float, rng: random.Random) -> str:
+    out: list[str] = []
+    for ch in text:
+        if ch != " " and rng.random() < sev:
+            r = rng.random()
+            if r < 0.34:
+                continue                                   # delete
+            if r < 0.67:
+                out.append(chr(rng.randint(97, 122)))      # substitute
+            else:
+                out.append(ch)
+                out.append(chr(rng.randint(97, 122)))      # insert
+        else:
+            out.append(ch)
+    return "".join(out).strip() or rng.choice(FOREIGN)
+
+
+def char_noise(pool: pd.DataFrame, n: int, rng: random.Random,
+               severity: float = 0.1) -> list[str]:
+    # Realistic input corruption (typos/OCR): misspellings become unseen tokens, so the
+    # domain classifier catches it while token_count PSI often does not.
+    return [_corrupt_chars(t, severity, rng)
+            for t in _sample_texts(pool["text"].tolist(), n, rng)]
+
+
+def token_dropout(pool: pd.DataFrame, n: int, rng: random.Random,
+                  severity: float = 0.4) -> list[str]:
+    # Degraded/truncated logging: drop a fraction of tokens -> a token_count shift PSI sees.
+    out = []
+    for t in _sample_texts(pool["text"].tolist(), n, rng):
+        words = t.split()
+        kept = [w for w in words if rng.random() >= severity]
+        out.append(" ".join(kept) if kept else (words[0] if words else rng.choice(FOREIGN)))
+    return out
+
+
 GENERATORS = {
     "no_drift": no_drift,
     "length_truncate": length_truncate,
@@ -98,6 +136,8 @@ GENERATORS = {
     "adjective_swap": adjective_swap,
     "semantic_replace": semantic_replace,
     "gradual_topic": gradual_topic,
+    "char_noise": char_noise,
+    "token_dropout": token_dropout,
 }
 
 # Whether each kind is expected to be genuine drift (for scoring detection vs FPR).
@@ -108,4 +148,6 @@ IS_DRIFT = {
     "adjective_swap": True,
     "semantic_replace": True,
     "gradual_topic": True,
+    "char_noise": True,
+    "token_dropout": True,
 }
