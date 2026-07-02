@@ -29,15 +29,20 @@ class DomainClassifierDetector:
         self._reference = reference
         return self
 
+    def _subsample(self, batch: Any, n: int, rng) -> Any:
+        # Subsample only when larger than n, preserving the draw order — this reproduces
+        # the text detector's balancing exactly (for benchmark parity).
+        if batch_len(batch) <= n:
+            return batch
+        idx = rng.choice(batch_len(batch), n, replace=False).tolist()
+        return batch_take(batch, idx)
+
     def _balanced(self, current: Any):
         rng = np.random.default_rng(self.seed)
-        nref, ncur = batch_len(self._reference), batch_len(current)
-        n = min(nref, ncur)
-        ridx = sorted(rng.choice(nref, n, replace=False).tolist())
-        cidx = sorted(rng.choice(ncur, n, replace=False).tolist())
-        return batch_take(self._reference, ridx), batch_take(current, cidx), n
+        n = min(batch_len(self._reference), batch_len(current))
+        return self._subsample(self._reference, n, rng), self._subsample(current, n, rng), n
 
-    def score(self, current: Any) -> float:
+    def _auc_and_n(self, current: Any) -> tuple[float, int]:
         if self._reference is None:
             raise RuntimeError("DomainClassifierDetector.detect called before fit().")
         from sklearn.base import clone
@@ -48,9 +53,14 @@ class DomainClassifierDetector:
         y = np.array([0] * n + [1] * n)
         splits = max(2, min(self.splits, n))
         cv = StratifiedKFold(n_splits=splits, shuffle=True, random_state=self.seed)
-        return float(np.mean(cross_val_score(clone(self.estimator), x, y, cv=cv,
-                                             scoring="roc_auc")))
+        auc = float(np.mean(cross_val_score(clone(self.estimator), x, y, cv=cv,
+                                            scoring="roc_auc")))
+        return auc, n
+
+    def score(self, current: Any) -> float:
+        return self._auc_and_n(current)[0]
 
     def detect(self, current: Any) -> DetectionResult:
-        auc = self.score(current)
-        return DetectionResult(self.name, auc, self.threshold, auc >= self.threshold)
+        auc, n = self._auc_and_n(current)
+        return DetectionResult(self.name, auc, self.threshold, auc >= self.threshold,
+                               extra={"n_reference": n, "n_current": n})

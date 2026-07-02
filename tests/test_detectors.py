@@ -49,6 +49,20 @@ def test_domain_classifier_on_embeddings_is_a_free_third_modality():
     assert det.detect(shifted).drift is True       # separable ⇒ drift
 
 
+def test_psi_from_reference_matches_compute_psi_exactly():
+    # Parity guard: the text production path routes PSI through PSIDetector.from_reference,
+    # which must reproduce drift.compute_psi to the last decimal.
+    from driftguard import drift
+
+    rng = np.random.default_rng(0)
+    ref = [" ".join(["w"] * int(rng.integers(3, 40))) for _ in range(400)]
+    cur = [" ".join(["w"] * int(rng.integers(1, 12))) for _ in range(200)]
+    reference = drift.build_reference(ref, bins=10)
+    expected = drift.compute_psi(cur, reference)["psi"]
+    det = PSIDetector.from_reference(reference, values_fn=drift.token_count_signal)
+    assert abs(det.score(cur) - expected) < 1e-9
+
+
 def test_composite_any_vs_all_rules():
     rng = np.random.default_rng(0)
     ref = pd.DataFrame({"x": rng.normal(0.0, 1.0, 300)})

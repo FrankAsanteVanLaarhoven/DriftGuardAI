@@ -24,6 +24,17 @@ class PSIDetector:
         self._edges: np.ndarray | None = None
         self._ref: np.ndarray | None = None
 
+    @classmethod
+    def from_reference(cls, reference: dict[str, Any], values_fn: Callable[[Any], Any],
+                       threshold: float = 0.2, name: str = "psi") -> PSIDetector:
+        """Build from a *frozen* reference (``bin_edges`` + ``reference_proportions``), e.g.
+        ``driftguard.drift.build_reference`` output — a training-time distribution rather
+        than a fit-on-the-current-sample one. Reproduces ``drift.compute_psi`` exactly."""
+        det = cls(values_fn=values_fn, threshold=threshold, name=name)
+        det._edges = np.asarray(reference["bin_edges"], dtype=float)
+        det._ref = np.asarray(reference["reference_proportions"], dtype=float)
+        return det
+
     def fit(self, reference: Any) -> PSIDetector:
         v = np.asarray(self.values_fn(reference), dtype=float)
         edges = np.unique(np.quantile(v, np.linspace(0, 1, self.bins + 1))) if v.size \
@@ -41,9 +52,11 @@ class PSIDetector:
             raise RuntimeError("PSIDetector.detect called before fit().")
         eps = 1e-6
         v = np.asarray(self.values_fn(current), dtype=float)
-        c = np.histogram(v, self._edges)[0] / max(len(v), 1) + eps
-        r = self._ref + eps
-        return float(np.sum((c - r) * np.log(c / r)))
+        cur = np.histogram(v, self._edges)[0] / max(len(v), 1)
+        # clip both sides (matches drift.compute_psi exactly for frozen-reference parity)
+        exp = np.clip(self._ref, eps, None)
+        cur = np.clip(cur, eps, None)
+        return float(np.sum((cur - exp) * np.log(cur / exp)))
 
     def detect(self, current: Any) -> DetectionResult:
         s = self.score(current)

@@ -39,5 +39,8 @@ def test_covariate_drift_shifts_numeric_columns_and_psi_flags_it():
 
     assert float((drifted["age"] - df["age"]).abs().mean()) > 0.0   # numeric shifted
     assert (drifted["workclass"] == df["workclass"]).all()          # categorical untouched
-    psi = tab.psi_numeric(df["age"].to_numpy(), drifted["age"].to_numpy())
-    assert psi > 0.2                                                # covariate shift flagged
+
+    # The covariate shift is flagged by the shared PSI detector (same class text uses).
+    from driftguard.detectors import PSIDetector
+    det = PSIDetector(values_fn=lambda d: d["age"].to_numpy(), threshold=0.2).fit(df)
+    assert det.detect(drifted).drift is True

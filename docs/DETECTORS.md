@@ -44,3 +44,14 @@ DomainClassifierDetector(LogisticRegression())                  # proven in test
 Adding a modality is: supply a `values_fn` and/or an `estimator`. No detector subclass, no
 duplicated PSI/AUC math. `tests/test_detectors.py` asserts protocol conformance and runs
 all three modalities; `examples/tabular_adult.py` uses these detectors in a full instance.
+
+## The text service runs on these detectors
+
+The production text path (`src/driftguard/textdrift.py`) is **not** a separate
+implementation — `domain_classifier_drift` delegates to `DomainClassifierDetector` (TF-IDF +
+logistic regression) and `composite_drift` reads the frozen training reference through
+`PSIDetector.from_reference`, which reproduces `drift.compute_psi` to the last decimal
+(guarded by `test_psi_from_reference_matches_compute_psi_exactly`). The migration is
+byte-for-byte behaviour-preserving: the committed drift benchmark (`benchmarks/results.json`,
+per-detector scorecard `0.29 / 0.57 / 0.71`) is unchanged. There is now one detector code
+path across text, tabular, and embeddings.

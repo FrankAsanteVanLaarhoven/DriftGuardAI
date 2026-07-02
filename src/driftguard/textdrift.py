@@ -34,6 +34,7 @@ import numpy as np
 
 from driftguard import drift
 from driftguard.config import Settings, get_settings
+from driftguard.detectors import DomainClassifierDetector, PSIDetector
 
 log = logging.getLogger("driftguard.textdrift")
 
@@ -46,32 +47,32 @@ def _balanced(reference: list[str], current: list[str], seed: int) -> tuple[list
     return ref, cur
 
 
-def domain_classifier_drift(reference_texts: list[str], current_texts: list[str],
-                            seed: int = 42, threshold: float = 0.75) -> dict[str, Any]:
-    """Reference-vs-current separability via cross-validated ROC-AUC."""
+def _text_domain_estimator():
     from sklearn.feature_extraction.text import TfidfVectorizer
     from sklearn.linear_model import LogisticRegression
-    from sklearn.model_selection import StratifiedKFold, cross_val_score
     from sklearn.pipeline import Pipeline
 
-    ref, cur = _balanced(reference_texts, current_texts, seed)
-    x = ref + cur
-    y = np.array([0] * len(ref) + [1] * len(cur))
-
-    pipe = Pipeline([
+    return Pipeline([
         ("tfidf", TfidfVectorizer(max_features=20000, ngram_range=(1, 2), min_df=2)),
         ("clf", LogisticRegression(max_iter=1000)),
     ])
-    folds = min(5, len(ref), len(cur))
-    cv = StratifiedKFold(n_splits=max(2, folds), shuffle=True, random_state=seed)
-    auc = float(np.mean(cross_val_score(pipe, x, y, cv=cv, scoring="roc_auc")))
+
+
+def domain_classifier_drift(reference_texts: list[str], current_texts: list[str],
+                            seed: int = 42, threshold: float = 0.75) -> dict[str, Any]:
+    """Reference-vs-current separability via cross-validated ROC-AUC — the text
+    instantiation of the shared :class:`~driftguard.detectors.DomainClassifierDetector`
+    (TF-IDF + logistic regression), the same detector the tabular/embedding paths use."""
+    det = DomainClassifierDetector(estimator=_text_domain_estimator(), threshold=threshold,
+                                   seed=seed, splits=5).fit(reference_texts)
+    r = det.detect(current_texts)
     return {
         "detector": "domain_classifier",
-        "auc": auc,
+        "auc": r.statistic,
         "threshold": threshold,
-        "drift": auc >= threshold,
-        "n_reference": len(ref),
-        "n_current": len(cur),
+        "drift": r.drift,
+        "n_reference": r.extra["n_reference"],
+        "n_current": r.extra["n_current"],
     }
 
 
@@ -97,14 +98,17 @@ def composite_drift(current_texts: list[str], reference_texts: list[str],
                     reference_dist: dict[str, Any], settings: Settings | None = None,
                     use_embed: bool = False) -> dict[str, Any]:
     settings = settings or get_settings()
-    psi = drift.compute_psi(current_texts, reference_dist)
-    psi_status = drift.classify_psi(psi["psi"], settings.psi_threshold)
+    # PSI over token_count via the shared detector, reading the frozen training reference —
+    # reproduces drift.compute_psi exactly, now through the DriftDetector interface.
+    psi_det = PSIDetector.from_reference(reference_dist, values_fn=drift.token_count_signal,
+                                         threshold=settings.psi_threshold)
+    psi = psi_det.detect(current_texts)
     dom = domain_classifier_drift(reference_texts, current_texts, settings.random_seed,
                                   settings.domain_auc_threshold)
 
     signals = {
-        "psi": {"value": psi["psi"], "threshold": settings.psi_threshold,
-                "drift": psi_status == "drift"},
+        "psi": {"value": psi.statistic, "threshold": settings.psi_threshold,
+                "drift": psi.drift},
         "domain_classifier": {"auc": dom["auc"], "threshold": dom["threshold"],
                               "drift": dom["drift"]},
     }
