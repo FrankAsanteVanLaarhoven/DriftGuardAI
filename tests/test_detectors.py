@@ -9,6 +9,7 @@ from driftguard.detectors import (
     DetectionResult,
     DomainClassifierDetector,
     DriftDetector,
+    MMDDetector,
     PSIDetector,
 )
 
@@ -23,7 +24,21 @@ def test_detectors_satisfy_the_protocol():
 
     assert isinstance(PSIDetector(values_fn=lambda x: [0.0]), DriftDetector)
     assert isinstance(DomainClassifierDetector(LogisticRegression()), DriftDetector)
+    assert isinstance(MMDDetector(), DriftDetector)
     assert isinstance(CompositeDetector([]), DriftDetector)
+
+
+def test_mmd_detector_on_embeddings():
+    # The shared MMD detector (used by the text embedding path) on dense vectors.
+    rng = np.random.default_rng(0)
+    ref = rng.normal(0.0, 1.0, (300, 8))
+    same = rng.normal(0.0, 1.0, (300, 8))
+    shifted = rng.normal(1.0, 1.0, (300, 8))
+    det = MMDDetector(threshold=0.2).fit(ref)          # linear kernel (default)
+    assert det.detect(same).drift is False              # means coincide ⇒ MMD ≈ 0
+    assert det.detect(shifted).drift is True            # shifted mean ⇒ large MMD
+    rbf = MMDDetector(kernel="rbf").fit(ref)
+    assert rbf.score(shifted) > rbf.score(same)         # rbf two-sample test also separates
 
 
 def test_psi_detector_reproduces_text_token_count_behaviour():

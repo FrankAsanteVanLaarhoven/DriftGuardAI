@@ -30,21 +30,11 @@ import sys
 from pathlib import Path
 from typing import Any
 
-import numpy as np
-
 from driftguard import drift
 from driftguard.config import Settings, get_settings
-from driftguard.detectors import DomainClassifierDetector, PSIDetector
+from driftguard.detectors import DomainClassifierDetector, MMDDetector, PSIDetector
 
 log = logging.getLogger("driftguard.textdrift")
-
-
-def _balanced(reference: list[str], current: list[str], seed: int) -> tuple[list[str], list[str]]:
-    rng = np.random.default_rng(seed)
-    n = min(len(reference), len(current))
-    ref = list(rng.choice(reference, size=n, replace=False)) if len(reference) > n else reference
-    cur = list(rng.choice(current, size=n, replace=False)) if len(current) > n else current
-    return ref, cur
 
 
 def _text_domain_estimator():
@@ -77,21 +67,20 @@ def domain_classifier_drift(reference_texts: list[str], current_texts: list[str]
 
 
 def embedding_mmd_drift(reference_texts: list[str], current_texts: list[str],
-                        model_name: str, seed: int = 42) -> dict[str, Any] | None:
-    """Optional: sentence-embedding MMD. Returns None if the extra is not installed."""
+                        model_name: str) -> dict[str, Any] | None:
+    """Optional: sentence-embedding MMD via the shared :class:`~driftguard.detectors.MMDDetector`
+    (the encoder is text-specific; the MMD math is the shared detector). Returns None if the
+    sentence-transformers extra is not installed."""
     try:
         from sentence_transformers import SentenceTransformer
     except Exception:  # noqa: BLE001 - optional extra
         return None
-    ref, cur = _balanced(reference_texts, current_texts, seed)
     model = SentenceTransformer(model_name)
-    er = model.encode(ref, normalize_embeddings=True, show_progress_bar=False)
-    ec = model.encode(cur, normalize_embeddings=True, show_progress_bar=False)
-    # Linear-kernel MMD^2 = ||mean(er) - mean(ec)||^2 for normalized embeddings.
-    diff = er.mean(axis=0) - ec.mean(axis=0)
-    mmd = float(np.dot(diff, diff))
-    return {"detector": "embedding_mmd", "model": model_name, "mmd": mmd,
-            "n_reference": len(ref), "n_current": len(cur)}
+    er = model.encode(list(reference_texts), normalize_embeddings=True, show_progress_bar=False)
+    ec = model.encode(list(current_texts), normalize_embeddings=True, show_progress_bar=False)
+    result = MMDDetector().fit(er).detect(ec)
+    return {"detector": "embedding_mmd", "model": model_name, "mmd": result.statistic,
+            "n_reference": len(reference_texts), "n_current": len(current_texts)}
 
 
 def composite_drift(current_texts: list[str], reference_texts: list[str],
@@ -113,9 +102,8 @@ def composite_drift(current_texts: list[str], reference_texts: list[str],
                               "drift": dom["drift"]},
     }
     if use_embed:
-        emb = embedding_mmd_drift(current_texts, reference_texts, settings.embed_model,
-                                  settings.random_seed)
-        if emb is not None:
+        emb = embedding_mmd_drift(current_texts, reference_texts, settings.embed_model)
+        if emb is not None:   # informational signal (not part of the drift decision)
             signals["embedding_mmd"] = {"mmd": emb["mmd"]}
 
     decisive = [s.get("drift") for s in signals.values() if "drift" in s]

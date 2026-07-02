@@ -23,6 +23,7 @@ composition**: each is adapted with a small extractor, not new detector code.
 |----------|------------------|--------|
 | `PSIDetector(values_fn, threshold, bins)` | `values_fn`: batch → 1-D numbers | Population Stability Index over any scalar (token count, a feature column, an embedding norm). |
 | `DomainClassifierDetector(estimator, threshold)` | an sklearn `estimator` accepting the raw items | Cross-validated reference-vs-current ROC-AUC (Rabanser et al. 2019). |
+| `MMDDetector(threshold, kernel)` | embedding vectors (linear or RBF kernel) | Maximum Mean Discrepancy between reference and current embedding batches. |
 | `CompositeDetector(detectors, rule)` | — | Combines detectors with `any` (safety-first) or `all`. |
 
 ## Same detector, three modalities
@@ -54,5 +55,7 @@ logistic regression) and `composite_drift` reads the frozen training reference t
 `PSIDetector.from_reference`, which reproduces `drift.compute_psi` to the last decimal
 (guarded by `test_psi_from_reference_matches_compute_psi_exactly`). The migration is
 byte-for-byte behaviour-preserving: the committed drift benchmark (`benchmarks/results.json`,
-per-detector scorecard `0.29 / 0.57 / 0.71`) is unchanged. There is now one detector code
-path across text, tabular, and embeddings.
+per-detector scorecard `0.29 / 0.57 / 0.71`) is unchanged. The optional embedding-MMD signal
+(`embedding_mmd_drift`) likewise delegates to `MMDDetector` — so `textdrift.py` carries **no
+local detector logic at all**. There is now one detector code path across text, tabular, and
+embeddings.
