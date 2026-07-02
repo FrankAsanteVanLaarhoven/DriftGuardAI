@@ -10,6 +10,10 @@ IMAGE ?= driftguard:local
 PORT ?= 8000
 SERVICE_URL ?= http://localhost:$(PORT)
 
+# The `docker` first on PATH may be a wrapper that injects a `compose` subcommand — turning
+# `docker compose ...` into `compose compose ...`. Prefer the real CLI (override: make stack DOCKER=...).
+DOCKER := $(shell [ -x /usr/bin/docker ] && echo /usr/bin/docker || command -v docker)
+
 .PHONY: help install lock lint fmt test data train train-transformer run run-transformer \
 	drift benchmark benchmark-sweep benchmark-stream recovery recovery-sweep \
 	example-tabular example-embedding docker stack stack-down demo clean
@@ -80,13 +84,13 @@ example-embedding: ## Third reference instance: the framework on MiniLM embeddin
 	uv run --extra embed python examples/embedding_20news.py
 
 docker: ## Build the production image
-	docker build -t $(IMAGE) .
+	$(DOCKER) build -t $(IMAGE) .
 
-stack: ## Launch app + Prometheus + Grafana + MLflow via docker compose
-	docker compose up -d --build
+stack: ## Launch app + Prometheus + Grafana + MLflow (DRIFTGUARD_APP_PORT=8010 to avoid a busy 8000)
+	$(DOCKER) compose up -d --build
 
 stack-down: ## Tear down the local stack
-	docker compose down -v
+	$(DOCKER) compose down -v
 
 demo: ## End-to-end local proof (see README "Demo script")
 	@bash scripts/demo.sh
