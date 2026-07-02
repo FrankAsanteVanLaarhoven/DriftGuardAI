@@ -24,6 +24,7 @@ import argparse
 import hashlib
 import json
 import random
+import statistics
 import sys
 import time
 from pathlib import Path
@@ -65,7 +66,8 @@ def retention_ratio(cand_fixed_f1: float, stale_fixed_f1: float) -> float:
     return cand_fixed_f1 / stale_fixed_f1 if stale_fixed_f1 > 1e-9 else 0.0
 
 
-def run(p: float = 0.7, window: int = 600, seed: int = 42) -> dict:
+def run(p: float = 0.7, window: int = 600, seed: int = 42,
+        train_sample: int | None = None) -> dict:
     settings = get_settings()
     train = load_split("train", settings)
     test = load_split("test", settings)
@@ -89,8 +91,15 @@ def run(p: float = 0.7, window: int = 600, seed: int = 42) -> dict:
     detection_time = time.perf_counter() - t0
 
     # --- 2. retrain a candidate on the drifted labelled data ----------------
+    # A seeded sub-sample of the drifted training set gives genuine per-seed model
+    # variation (full-data retraining is deterministic); None uses all rows.
+    if train_sample and train_sample < len(dxtr):
+        idx = random.Random(10_000 + seed).sample(range(len(dxtr)), train_sample)
+        fit_x, fit_y = [dxtr[i] for i in idx], [ytr[i] for i in idx]
+    else:
+        fit_x, fit_y = dxtr, ytr
     t1 = time.perf_counter()
-    candidate = registry.build_primary_pipeline().fit(dxtr, ytr)
+    candidate = registry.build_primary_pipeline().fit(fit_x, fit_y)
     retrain_time = time.perf_counter() - t1
 
     # --- 3. evaluate on both holdouts ---------------------------------------
@@ -181,36 +190,49 @@ def to_markdown(r: dict) -> str:
     ])
 
 
-def sweep_p(ps: list[float], window: int = 600, seed: int = 42) -> dict:
-    """Recovery vs drift severity: run the loop across a range of vocab-drift fractions."""
+def sweep_p(ps: list[float], window: int = 600, seeds: int = 3,
+            train_sample: int | None = 40000) -> dict:
+    """Recovery vs drift severity across `seeds` seeds per point, reported as mean ± std.
+
+    Each seed retrains on a different sub-sample of the drifted data (``train_sample``),
+    so the recovery/retention figures carry genuine variation rather than a single number.
+    """
     rows = []
     for p in ps:
-        r = run(p=p, window=window, seed=seed)
-        rec = r["recovery"]
+        recs, rets, ttrs, dual = [], [], [], []
+        for s in range(seeds):
+            r = run(p=p, window=window, seed=1000 + s, train_sample=train_sample)
+            rec = r["recovery"]
+            recs.append(rec["recovery_ratio"])
+            rets.append(rec["retention_ratio"])
+            ttrs.append(rec["time_to_recovery_s"])
+            dual.append(r["gate_dual_drift_aware"]["passed"])
         rows.append({
-            "p": p,
-            "detected": r["detected"],
-            "recovery_ratio": rec["recovery_ratio"],
-            "retention_ratio": rec["retention_ratio"],
-            "time_to_recovery_s": rec["time_to_recovery_s"],
-            "recovery_delta_on_drift": r["macro_f1"]["recovery_delta_on_drift"],
-            "gate_dual_passed": r["gate_dual_drift_aware"]["passed"],
+            "p": p, "seeds": seeds,
+            "recovery_ratio_mean": round(statistics.mean(recs), 4),
+            "recovery_ratio_std": round(statistics.pstdev(recs), 4),
+            "retention_ratio_mean": round(statistics.mean(rets), 4),
+            "retention_ratio_std": round(statistics.pstdev(rets), 4),
+            "time_to_recovery_s_mean": round(statistics.mean(ttrs), 2),
+            "dual_gate_pass_fraction": round(sum(dual) / len(dual), 2),
         })
-    return {"window": window, "seed": seed, "rows": rows}
+    return {"window": window, "seeds": seeds, "train_sample": train_sample, "rows": rows}
 
 
 def sweep_to_markdown(s: dict) -> str:
     lines = [
-        f"Recovery vs drift severity (window={s['window']}, seed={s['seed']}):",
+        f"Recovery vs drift severity (window={s['window']}, {s['seeds']} seeds, "
+        f"retrain sub-sample={s['train_sample']}):",
         "",
-        "| p (vocab drift) | detected | recovery ratio | retention ratio | TTR (s) | dual gate |",
-        "|---|---|---|---|---|---|",
+        "| p (vocab drift) | recovery ratio (mean±std) | retention ratio (mean±std) "
+        "| TTR (s) | dual gate (pass frac) |",
+        "|---|---|---|---|---|",
     ]
     for r in s["rows"]:
         lines.append(
-            f"| {r['p']:.2f} | {r['detected']} | {r['recovery_ratio']:.3f} | "
-            f"{r['retention_ratio']:.3f} | {r['time_to_recovery_s']:.1f} | "
-            f"{'PASS' if r['gate_dual_passed'] else 'FAIL'} |"
+            f"| {r['p']:.2f} | {r['recovery_ratio_mean']:.3f} ± {r['recovery_ratio_std']:.3f} "
+            f"| {r['retention_ratio_mean']:.3f} ± {r['retention_ratio_std']:.3f} "
+            f"| {r['time_to_recovery_s_mean']:.1f} | {r['dual_gate_pass_fraction']:.2f} |"
         )
     return "\n".join(lines)
 
@@ -221,12 +243,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--window", type=int, default=600)
     parser.add_argument("--sweep-p", default=None,
                         help="Comma-separated p values for a recovery-vs-severity sweep.")
+    parser.add_argument("--seeds", type=int, default=3,
+                        help="Seeds per sweep point (mean ± std).")
+    parser.add_argument("--train-sample", type=int, default=40000,
+                        help="Drifted-data retrain sub-sample per seed (for variation).")
     args = parser.parse_args(argv)
 
     here = Path(__file__).resolve().parent
     if args.sweep_p:
         ps = [float(x) for x in args.sweep_p.split(",")]
-        result = sweep_p(ps, args.window)
+        result = sweep_p(ps, args.window, args.seeds, args.train_sample)
         out = here / "results_recovery_sweep.json"
         out.write_text(json.dumps(result, indent=2))
         print(sweep_to_markdown(result))

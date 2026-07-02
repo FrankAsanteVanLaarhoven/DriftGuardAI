@@ -70,8 +70,8 @@ benchmark-stream: ## Streaming drift benchmark: detection latency across tempora
 recovery: ## Closed-loop: detect -> retrain -> gate under concept drift (timed, measured)
 	uv run python benchmarks/closed_loop.py
 
-recovery-sweep: ## Recovery-vs-severity curve (time-to-recovery, recovery + retention ratios)
-	uv run python benchmarks/closed_loop.py --sweep-p 0.3,0.5,0.7,0.9
+recovery-sweep: ## Recovery-vs-severity curve, mean±std over seeds (recovery + retention + TTR)
+	uv run python benchmarks/closed_loop.py --sweep-p 0.3,0.5,0.7,0.9 --seeds 3 --train-sample 40000
 
 docker: ## Build the production image
 	docker build -t $(IMAGE) .

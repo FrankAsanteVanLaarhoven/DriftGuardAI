@@ -175,20 +175,22 @@ the floor). This resolves the tension between "never promote a regression" and "
 under concept drift" — safety intent preserved, recovery unblocked. Unit tests cover all
 three modes and both failure directions.
 
-**Recovery vs drift severity (`make recovery-sweep`), source:
-`benchmarks/results_recovery_sweep.json`.** Sweeping the drift fraction `p` traces the
-adaptation/forgetting trade-off — and shows the dual gate tracking it:
+**Recovery vs drift severity (`make recovery-sweep`, 3 seeds, 40k retrain sub-sample),
+source: `benchmarks/results_recovery_sweep.json`.** Sweeping the drift fraction `p` traces
+the adaptation/forgetting trade-off with variation — and shows the dual gate tracking it:
 
-| p (vocab drift) | detected | recovery ratio | retention ratio | TTR (s) | dual gate |
-|-----------------|----------|----------------|-----------------|---------|-----------|
-| 0.30            | True     | 0.879          | 0.984           | 23.3    | PASS      |
-| 0.50            | True     | 0.952          | 0.969           | 19.9    | PASS      |
-| 0.70            | True     | 0.968          | 0.926           | 23.4    | PASS      |
-| 0.90            | True     | 0.992          | **0.797**       | 20.8    | **FAIL**  |
+| p (vocab drift) | recovery ratio (mean±std) | retention ratio (mean±std) | TTR (s) | dual gate (pass frac) |
+|-----------------|---------------------------|----------------------------|---------|-----------------------|
+| 0.30            | 0.352 ± 0.102             | 0.975 ± 0.003              | 15.3    | 1.00                  |
+| 0.50            | 0.726 ± 0.027             | 0.961 ± 0.003              | 14.9    | 1.00                  |
+| 0.70            | 0.856 ± 0.011             | 0.923 ± 0.007              | 16.1    | 0.67                  |
+| 0.90            | 0.930 ± 0.003             | **0.787 ± 0.019**          | 16.4    | **0.00**              |
 
-Deeper drift → higher recovery on the new distribution but lower retention of the old one.
-At `p=0.90` retention falls to 0.797, adaptation has become catastrophic forgetting, and
-the dual gate **fails closed** — promoting recovery only while it is safe.
+Retention falls with severity (0.975 → 0.787). The dual gate promotes every seed at
+`p ≤ 0.50`, sits on the boundary at `p=0.70` (2/3 promote), and **fails closed for every
+seed at `p=0.90`** — where adaptation has become catastrophic forgetting. (Recovery ratio
+is small/noisy at `p=0.30` because light drift leaves little loss to regain; the system is
+healthy there — retention 0.975, gate passes.)
 
 ## Container & stack
 

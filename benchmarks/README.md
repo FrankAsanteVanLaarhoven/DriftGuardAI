@@ -105,7 +105,19 @@ benchmark cannot express.
 
 `closed_loop.py` measures the full self-healing loop under a *vocabulary concept drift*
 (a fraction `p` of tokens acquire a new surface form): detect → retrain a candidate on
-the drifted labelled data → baseline gate. Measured run (p=0.7, window 600):
+the drifted labelled data → baseline gate.
+
+**Metric definitions.**
+- **Recovery ratio** = `(candidate_on_drift − stale_on_drift) / (orig_clean − stale_on_drift)`
+  — the fraction of the drift-induced accuracy loss regained on the *new* distribution.
+  1.0 = fully restored to the pre-drift clean level; 0 = no recovery. (`orig_clean` is the
+  pre-drift primary's score on the clean/fixed holdout.)
+- **Retention ratio** = `candidate_on_fixed / stale_on_fixed` — the share of the *original*
+  (pre-drift) distribution's performance kept after adapting. 1.0 = no forgetting; lower =
+  more of the old distribution given up.
+- **Time-to-recovery** = detect + retrain + evaluate wall time to a gate-ready candidate.
+
+Measured run (p=0.7, window 600, full-data retrain):
 
 - **Detected** by the domain classifier (AUC 1.0000) in **0.25 s**; PSI blind (0.0142).
 - Retrain **23.0 s** → **time-to-recovery 24.0 s** (detect + retrain + evaluate).
@@ -137,20 +149,24 @@ Safety intent preserved, recovery unblocked.
 
 ## Recovery vs drift severity (`make recovery-sweep`)
 
-Sweeping the vocabulary-drift fraction `p` traces the recovery/retention trade-off
-(window 600, seed 42) → `results_recovery_sweep.json`:
+Sweeping the vocabulary-drift fraction `p` across **3 seeds** — each retraining on a
+40k-row sub-sample of the drifted data, so the figures carry genuine variation — traces
+the recovery/retention trade-off (window 600) → `results_recovery_sweep.json`:
 
-| p (vocab drift) | detected | recovery ratio | retention ratio | TTR (s) | dual gate |
-|-----------------|----------|----------------|-----------------|---------|-----------|
-| 0.30            | True     | 0.879          | **0.984**       | 23.3    | PASS      |
-| 0.50            | True     | 0.952          | 0.969           | 19.9    | PASS      |
-| 0.70            | True     | 0.968          | 0.926           | 23.4    | PASS      |
-| 0.90            | True     | **0.992**      | **0.797**       | 20.8    | **FAIL**  |
+| p (vocab drift) | recovery ratio (mean±std) | retention ratio (mean±std) | TTR (s) | dual gate (pass frac) |
+|-----------------|---------------------------|----------------------------|---------|-----------------------|
+| 0.30            | 0.352 ± 0.102             | **0.975 ± 0.003**          | 15.3    | 1.00                  |
+| 0.50            | 0.726 ± 0.027             | 0.961 ± 0.003              | 14.9    | 1.00                  |
+| 0.70            | 0.856 ± 0.011             | 0.923 ± 0.007              | 16.1    | 0.67                  |
+| 0.90            | **0.930 ± 0.003**         | **0.787 ± 0.019**          | 16.4    | **0.00**              |
 
-**Reading it.** As drift deepens, the retrained candidate recovers *more* on the new
-distribution (recovery ratio 0.879 → 0.992) but retains *less* of the old one (retention
-0.984 → 0.797) — the fundamental adaptation/forgetting trade-off, measured. At `p=0.90`
-retention collapses to 0.797 and the **dual gate fails closed**: the candidate adapted to
-extreme drift by forgetting the original distribution below the forgetting floor, so it is
-*not* promoted. The gate tracks the trade-off exactly — it promotes recovery while it is
-safe (p ≤ 0.70) and refuses it once adaptation turns into catastrophic forgetting.
+**Reading it.** Retention falls monotonically as drift deepens (0.975 → 0.787): heavier
+drift forces the candidate to give up more of the old distribution. The **dual gate tracks
+that trade-off** — every seed promotes at `p ≤ 0.50`, the gate sits right on the boundary
+at `p=0.70` (2 of 3 seeds promote), and **every seed fails closed at `p=0.90`**, where
+retention has collapsed to 0.787 and adaptation has become catastrophic forgetting.
+Recovery ratio rises with severity but is small and *noisy* at `p=0.30` (0.352 ± 0.102):
+light drift causes little accuracy loss, so the ratio divides two nearby numbers — the
+system is healthy there (retention 0.975, gate passes), the *statistic* is just unstable.
+(The sweep sub-samples 40k rows per seed to expose variance; the full-data single run
+above recovers more — 0.968 at p=0.7.)
