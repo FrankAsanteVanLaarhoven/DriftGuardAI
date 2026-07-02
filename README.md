@@ -96,7 +96,9 @@ companion to the production service in this repo.
 - `docs/DETECTORS.md` — **the pluggable drift-detector interface** (PSI / domain-classifier /
   composite), reused across text, tabular, and embeddings with no new detector code.
 - `examples/` — **reference instances** proving the framework generalises: a **tabular**
-  model on OpenML Adult (`make example-tabular`) reuses the same gates + metrics as text.
+  model on OpenML Adult (`make example-tabular`) and an **embedding** model on 20 Newsgroups
+  (`make example-embedding`) reuse the same gates, metrics, and detectors as text — three
+  model families and data types, one governance layer.
 - `ARCHITECTURE.md` — the closed loop and the two-sense fallback contract.
 - `CASE_STUDY.md` — measured numbers (model quality, PSI, resilience, infra checks).
 - `CLAUDE.md` — repository conventions and guardrails.

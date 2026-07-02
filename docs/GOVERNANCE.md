@@ -7,8 +7,8 @@ does not depend on text, TF-IDF, or any particular model.
 
 The framework lives in [`src/driftguard/governance.py`](../src/driftguard/governance.py)
 and operates purely on **scalar quality scores** (a model's metric on a holdout). Macro-F1
-on AG News is the reference instance; the same primitives govern a tabular classifier, a
-ranker, or an LLM-eval score unchanged.
+on AG News is the reference instance; the same primitives govern the tabular and embedding
+instances below — or a ranker or an LLM-eval score — unchanged.
 
 ## 1. Promotion gates — *should we replace what's in production?*
 
@@ -61,15 +61,16 @@ verbatim:
 Feed the resulting scores to `incumbent_gate` / `promotion_gate` and report
 `recovery_ratio` / `retention_ratio`. Nothing in the governance layer changes.
 
-## 5. Proven: a second instance (tabular)
+## 5. Proven: two more instances (tabular + embeddings)
 
-This is not aspirational — [`examples/tabular_adult.py`](../examples/tabular_adult.py)
-(`make example-tabular`) is a second instance on **OpenML Adult** with a
-**HistGradientBoosting** model and a tabular drift detector (PSI on features + a domain
-classifier). It imports `incumbent_gate`, `promotion_gate`, `recovery_ratio`, and
-`retention_ratio` **unchanged** — a test asserts they are the *same objects* the text
-service uses. As covariate drift deepens, retention falls and the `dual` gate flips from
-PASS to fail-closed, exactly as on text:
+This is not aspirational — two further instances import `incumbent_gate`, `promotion_gate`,
+`recovery_ratio`, and `retention_ratio` **unchanged** (tests assert they are the *same
+objects* the text service uses).
+
+**Tabular** — [`examples/tabular_adult.py`](../examples/tabular_adult.py)
+(`make example-tabular`): **OpenML Adult** + **HistGradientBoosting**, PSI on features + a
+domain classifier. As covariate drift deepens, retention falls and the `dual` gate flips
+PASS → fail-closed, exactly as on text:
 
 | severity | detected | recovery ratio | retention ratio | dual gate |
 |----------|----------|----------------|-----------------|-----------|
@@ -77,4 +78,19 @@ PASS to fail-closed, exactly as on text:
 | 0.20     | True     | 0.765          | 0.861           | FAIL      |
 | 0.40     | True     | 0.779          | 0.728           | FAIL      |
 
-Same gates, same metrics, same safety behaviour — a different model family and data type.
+**Embeddings** — [`examples/embedding_20news.py`](../examples/embedding_20news.py)
+(`make example-embedding`): **20 Newsgroups** + logistic regression on **MiniLM** sentence
+embeddings, with the shared detectors on the dense vectors. The drift is an
+information-preserving rotation, so retraining *fully* recovers (recovery ≈ 1.0) — yet
+retention still falls as the candidate forgets the clean distribution, and the gate flips:
+
+| severity | detected | recovery ratio | retention ratio | dual gate |
+|----------|----------|----------------|-----------------|-----------|
+| 0.10     | True     | 1.000          | 0.993           | PASS      |
+| 0.50     | True     | 1.000          | 0.937           | PASS      |
+| 0.75     | True     | 1.000          | 0.606           | FAIL      |
+
+The embedding case makes the point sharpest: **recovery alone is not safety**. A model can
+perfectly relearn the drifted task and still be unpromotable because it has forgotten
+production — which is exactly what the forgetting-aware gate catches. Same gates, same
+metrics, three model families and data types.

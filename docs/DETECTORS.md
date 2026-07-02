@@ -38,12 +38,13 @@ PSIDetector(values_fn=lambda df: df["hours-per-week"].to_numpy())
 DomainClassifierDetector(HistGradientBoostingClassifier())      # see examples/tabular_adult.py
 
 # Embeddings — the same domain classifier on dense vectors, zero new code
-DomainClassifierDetector(LogisticRegression())                  # proven in tests/test_detectors.py
+DomainClassifierDetector(LogisticRegression())                  # see examples/embedding_20news.py
 ```
 
 Adding a modality is: supply a `values_fn` and/or an `estimator`. No detector subclass, no
 duplicated PSI/AUC math. `tests/test_detectors.py` asserts protocol conformance and runs
-all three modalities; `examples/tabular_adult.py` uses these detectors in a full instance.
+all three modalities; `examples/tabular_adult.py` (tabular) and `examples/embedding_20news.py`
+(MiniLM sentence embeddings) use these detectors in full, measured instances.
 
 ## The text service runs on these detectors
 

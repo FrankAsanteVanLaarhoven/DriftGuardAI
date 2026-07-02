@@ -199,6 +199,37 @@ seed at `p=0.90`** — where adaptation has become catastrophic forgetting. (Rec
 is small/noisy at `p=0.30` because light drift leaves little loss to regain; the system is
 healthy there — retention 0.975, gate passes.)
 
+## Generalization: the same governance on two more model families
+
+The gates and metrics above are `driftguard.governance`, imported **unchanged** by two
+non-text instances (tests assert they are the *same objects*). This is the "model-agnostic"
+claim as measured code, not prose.
+
+**Tabular** — `make example-tabular` (OpenML Adult, HistGradientBoosting; clean holdout:
+baseline 0.783, primary 0.819 macro-F1):
+
+| severity | detected | recovery | retention | dual gate |
+|----------|----------|----------|-----------|-----------|
+| 0.10     | True     | 0.780    | 0.936     | PASS      |
+| 0.20     | True     | 0.765    | 0.861     | FAIL      |
+| 0.40     | True     | 0.779    | 0.728     | FAIL      |
+
+**Embeddings** — `make example-embedding` (20 Newsgroups, LogReg on MiniLM sentence
+embeddings; clean holdout: baseline 0.838, primary 0.907 macro-F1). Drift is an
+information-preserving rotation, so retraining *fully* recovers the drifted task:
+
+| severity | detected | recovery | retention | dual gate |
+|----------|----------|----------|-----------|-----------|
+| 0.10     | True     | 1.000    | 0.993     | PASS      |
+| 0.50     | True     | 1.000    | 0.937     | PASS      |
+| 0.75     | True     | 1.000    | 0.606     | FAIL      |
+
+The embedding case is the sharpest statement of the framework's thesis: **recovery alone is
+not safety.** A candidate that perfectly relearns the drifted task (recovery ≈ 1.0) is still
+refused promotion once it has forgotten the clean distribution (retention 0.606) — precisely
+what the forgetting-aware `dual` gate exists to catch. Same gates, same metrics, three model
+families and data types.
+
 ## Container & stack
 
 - Multi-stage image builds and runs as **non-root (uid 10001)** with a **read-only

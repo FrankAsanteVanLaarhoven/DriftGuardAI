@@ -12,7 +12,7 @@ SERVICE_URL ?= http://localhost:$(PORT)
 
 .PHONY: help install lock lint fmt test data train train-transformer run run-transformer \
 	drift benchmark benchmark-sweep benchmark-stream recovery recovery-sweep \
-	example-tabular docker stack stack-down demo clean
+	example-tabular example-embedding docker stack stack-down demo clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -75,6 +75,9 @@ recovery-sweep: ## Recovery-vs-severity curve, mean±std over seeds (recovery + 
 
 example-tabular: ## Second reference instance: the governance framework on Adult (tabular)
 	uv run python examples/tabular_adult.py
+
+example-embedding: ## Third reference instance: the framework on MiniLM embeddings (20 News)
+	uv run --extra embed python examples/embedding_20news.py
 
 docker: ## Build the production image
 	docker build -t $(IMAGE) .

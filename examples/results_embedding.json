@@ -1,0 +1,41 @@
+{
+  "instance": "embedding/20newsgroups",
+  "model": "LogReg on MiniLM-384d (primary) + LogReg on TruncatedSVD-3 (baseline)",
+  "macro_f1_clean": {
+    "baseline_fixed": 0.8381,
+    "primary_fixed_incumbent": 0.907,
+    "stale_on_drift": 0.9065,
+    "candidate_on_drift": 0.907,
+    "candidate_on_fixed": 0.9007
+  },
+  "rows": [
+    {
+      "severity": 0.1,
+      "detected": true,
+      "recovery_ratio": 1.0,
+      "retention_ratio": 0.9931,
+      "dual_gate_passed": true
+    },
+    {
+      "severity": 0.25,
+      "detected": true,
+      "recovery_ratio": 1.0,
+      "retention_ratio": 0.9891,
+      "dual_gate_passed": true
+    },
+    {
+      "severity": 0.5,
+      "detected": true,
+      "recovery_ratio": 1.0,
+      "retention_ratio": 0.9367,
+      "dual_gate_passed": true
+    },
+    {
+      "severity": 0.75,
+      "detected": true,
+      "recovery_ratio": 1.0,
+      "retention_ratio": 0.6058,
+      "dual_gate_passed": false
+    }
+  ]
+}
