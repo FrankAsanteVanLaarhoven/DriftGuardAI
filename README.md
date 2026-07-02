@@ -69,6 +69,20 @@ Installs, trains, runs the full test suite (including the fallback chaos test),
 serves predictions, **removes the primary and shows the service stay up on the
 baseline (HTTP 200)**, then flags drift on a shifted sample.
 
+## Local observability stack
+
+```bash
+make stack                                         # app + Prometheus + Grafana + MLflow
+# on a host where 8000/3000 are busy, override the ports:
+DRIFTGUARD_APP_PORT=8010 DRIFTGUARD_GRAFANA_PORT=3001 make stack
+```
+
+Grafana provisions a **DriftGuard** folder with two dashboards against the app's Prometheus
+metrics: **DriftGuard — Adaptation Governance** (the demo view — live serving tier, fallback
+events, latency-budget breaches, baseline traffic share, plus the measured recovery/retention
+and drift-detection scorecard) and **DriftGuard Service Health** (request rate, p95 latency,
+error rate). Tear down with `make stack-down`.
+
 ## Reproducible research demo (educational companion)
 
 A self-contained Jupyter notebook — `notebooks/ag_news_drift_demo.ipynb` — **executed with all
