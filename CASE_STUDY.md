@@ -28,7 +28,9 @@ impossible margin (0.5) the same candidate is **blocked** (0.9197 < 1.3956) and 
 
 **No-worse-than-incumbent gate (DistilBERT promotion):** DistilBERT
 (`distilbert-base-uncased`, 3 epochs, seed 42, full 108k train rows, RTX 4080 SUPER)
-scored **macro-F1 0.9412** on the frozen holdout. The promotion gate required it to beat
+scored **macro-F1 0.9412** (accuracy 0.9413) on the frozen holdout — measured on GPU and
+written to [`artifacts/metrics_transformer.json`](artifacts/metrics_transformer.json);
+reproduce end to end with `make train-transformer`. The promotion gate required it to beat
 `max(baseline 0.8956, incumbent primary 0.9197)`, so it was gated against **0.9197**, not
 the baseline — it cleared it (0.9412 ≥ 0.9197, +0.0215) and was promoted. A weaker
 candidate scoring between 0.8956 and 0.9197 would beat the baseline yet be **rejected** as

@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
@@ -68,11 +69,35 @@ def main(argv: list[str] | None = None) -> int:
     registry.save_bundle(registry.make_bundle(clf, "primary", metrics, "distilbert-1"), out)
     print(f"Saved bundle -> {out}")
 
-    if args.promote and gate.passed:
+    promoted = bool(args.promote and gate.passed)
+    if promoted:
         settings.primary_pointer_path.write_text(str(out.relative_to(out.parents[1])))
         print(f"Promoted: pointer -> {settings.primary_pointer_path}")
     elif args.promote:
         print("Gate failed — not promoted (fail-closed).")
+
+    # Persist the measured result so the case study can cite a file, not prose.
+    bar, bar_source = registry.effective_promotion_bar(baseline_m["macro_f1"], incumbent_f1)
+    metrics_path = settings.artifacts_dir / "metrics_transformer.json"
+    metrics_path.write_text(json.dumps({
+        "model": clf.model_name,
+        "kind": "primary_transformer",
+        "accuracy": metrics["accuracy"],
+        "macro_f1": metrics["macro_f1"],
+        "baseline_macro_f1": baseline_m["macro_f1"],
+        "incumbent_macro_f1": incumbent_f1,
+        "promotion_bar": bar,
+        "promotion_bar_source": bar_source,
+        "gate_passed": gate.passed,
+        "gate_reason": gate.reason,
+        "promoted": promoted,
+        "device": str(clf._resolve_device()),
+        "config": {"epochs": args.epochs, "batch_size": args.batch_size,
+                   "max_length": args.max_length, "seed": settings.random_seed,
+                   "train_rows": len(xtr)},
+        "measured_at": datetime.now(UTC).isoformat(),
+    }, indent=2, sort_keys=True))
+    print(f"Wrote metrics -> {metrics_path}")
     return 0 if gate.passed else 1
 
 

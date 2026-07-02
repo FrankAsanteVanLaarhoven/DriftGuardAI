@@ -1,0 +1,22 @@
+{
+  "accuracy": 0.9413157894736842,
+  "baseline_macro_f1": 0.8955821800296329,
+  "config": {
+    "batch_size": 32,
+    "epochs": 3,
+    "max_length": 128,
+    "seed": 42,
+    "train_rows": 108000
+  },
+  "device": "cuda",
+  "gate_passed": true,
+  "gate_reason": "candidate macro-F1 0.9412 >= max(baseline 0.8956, incumbent 0.9197) + margin 0.0000 (= 0.9197; bar set by incumbent primary)",
+  "incumbent_macro_f1": 0.919729523867007,
+  "kind": "primary_transformer",
+  "macro_f1": 0.9411699454344962,
+  "measured_at": "2026-07-02T04:07:13.022650+00:00",
+  "model": "distilbert-base-uncased",
+  "promoted": true,
+  "promotion_bar": 0.919729523867007,
+  "promotion_bar_source": "incumbent primary"
+}
