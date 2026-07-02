@@ -11,7 +11,8 @@ PORT ?= 8000
 SERVICE_URL ?= http://localhost:$(PORT)
 
 .PHONY: help install lock lint fmt test data train train-transformer run run-transformer \
-	drift benchmark benchmark-sweep benchmark-stream recovery docker stack stack-down demo clean
+	drift benchmark benchmark-sweep benchmark-stream recovery recovery-sweep \
+	docker stack stack-down demo clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -68,6 +69,9 @@ benchmark-stream: ## Streaming drift benchmark: detection latency across tempora
 
 recovery: ## Closed-loop: detect -> retrain -> gate under concept drift (timed, measured)
 	uv run python benchmarks/closed_loop.py
+
+recovery-sweep: ## Recovery-vs-severity curve (time-to-recovery, recovery + retention ratios)
+	uv run python benchmarks/closed_loop.py --sweep-p 0.3,0.5,0.7,0.9
 
 docker: ## Build the production image
 	docker build -t $(IMAGE) .

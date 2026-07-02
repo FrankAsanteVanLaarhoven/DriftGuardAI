@@ -52,6 +52,19 @@ def _macro_f1(pipeline, texts: list[str], labels: list[int]) -> float:
     return float(f1_score(labels, pipeline.predict(texts), average="macro"))
 
 
+def recovery_ratio(cand_drift_f1: float, stale_drift_f1: float, orig_clean_f1: float) -> float:
+    """Fraction of the drift-induced accuracy loss the candidate regains on the *new*
+    distribution. 1.0 = fully restored to the pre-drift clean level; 0.0 = no recovery."""
+    denom = orig_clean_f1 - stale_drift_f1
+    return (cand_drift_f1 - stale_drift_f1) / denom if denom > 1e-9 else 0.0
+
+
+def retention_ratio(cand_fixed_f1: float, stale_fixed_f1: float) -> float:
+    """Old-distribution performance kept after adapting (catastrophic-forgetting guard).
+    1.0 = no forgetting; lower = more of the original distribution given up."""
+    return cand_fixed_f1 / stale_fixed_f1 if stale_fixed_f1 > 1e-9 else 0.0
+
+
 def run(p: float = 0.7, window: int = 600, seed: int = 42) -> dict:
     settings = get_settings()
     train = load_split("train", settings)
@@ -81,11 +94,20 @@ def run(p: float = 0.7, window: int = 600, seed: int = 42) -> dict:
     retrain_time = time.perf_counter() - t1
 
     # --- 3. evaluate on both holdouts ---------------------------------------
+    t2 = time.perf_counter()
     stale_drift_f1 = _macro_f1(stale, dxte, yte)
     stale_fixed_f1 = _macro_f1(stale, xte, yte)
     cand_drift_f1 = _macro_f1(candidate, dxte, yte)
     cand_fixed_f1 = _macro_f1(candidate, xte, yte)
     base_drift_f1 = _macro_f1(baseline, dxte, yte)
+    eval_time = time.perf_counter() - t2
+
+    # Recovery metrics: how much of the drift-induced loss is regained on the new
+    # distribution, how much of the old distribution is retained, and how long it took.
+    orig_clean_f1 = stale_fixed_f1  # the pre-drift primary's clean-holdout score
+    rec_ratio = recovery_ratio(cand_drift_f1, stale_drift_f1, orig_clean_f1)
+    ret_ratio = retention_ratio(cand_fixed_f1, stale_fixed_f1)
+    time_to_recovery = detection_time + retrain_time + eval_time
 
     # --- 4. gate on the stale fixed holdout vs a drift-refreshed holdout -----
     gate_fixed = registry.baseline_gate(cand_fixed_f1, base_fixed_f1, settings.promotion_margin)
@@ -108,7 +130,14 @@ def run(p: float = 0.7, window: int = 600, seed: int = 42) -> dict:
         "timing_s": {
             "detection": round(detection_time, 3),
             "retrain": round(retrain_time, 3),
+            "evaluate": round(eval_time, 3),
             "detection_to_decision": round(detection_time + retrain_time, 3),
+        },
+        "recovery": {
+            "time_to_recovery_s": round(time_to_recovery, 3),
+            "recovery_ratio": round(rec_ratio, 4),
+            "retention_ratio": round(ret_ratio, 4),
+            "orig_clean_macro_f1": round(orig_clean_f1, 4),
         },
         "macro_f1": {
             "stale_on_drift": round(stale_drift_f1, 4),
@@ -126,13 +155,15 @@ def run(p: float = 0.7, window: int = 600, seed: int = 42) -> dict:
 
 
 def to_markdown(r: dict) -> str:
-    m, t = r["macro_f1"], r["timing_s"]
+    m, t, rec = r["macro_f1"], r["timing_s"], r["recovery"]
     return "\n".join([
         f"Scenario: {r['scenario']} — detected={r['detected']} by {r['detected_by']} "
         f"(domain AUC {r['domain_auc']:.4f}, PSI {r['psi']:.4f})",
         "",
         f"Detection {t['detection']}s | retrain {t['retrain']}s | "
         f"detection→decision {t['detection_to_decision']}s",
+        f"Time-to-recovery {rec['time_to_recovery_s']}s | "
+        f"recovery ratio {rec['recovery_ratio']:.3f} | retention {rec['retention_ratio']:.3f}",
         "",
         "| macro-F1               | stale primary | retrained candidate |",
         "|------------------------|---------------|---------------------|",
@@ -150,14 +181,60 @@ def to_markdown(r: dict) -> str:
     ])
 
 
+def sweep_p(ps: list[float], window: int = 600, seed: int = 42) -> dict:
+    """Recovery vs drift severity: run the loop across a range of vocab-drift fractions."""
+    rows = []
+    for p in ps:
+        r = run(p=p, window=window, seed=seed)
+        rec = r["recovery"]
+        rows.append({
+            "p": p,
+            "detected": r["detected"],
+            "recovery_ratio": rec["recovery_ratio"],
+            "retention_ratio": rec["retention_ratio"],
+            "time_to_recovery_s": rec["time_to_recovery_s"],
+            "recovery_delta_on_drift": r["macro_f1"]["recovery_delta_on_drift"],
+            "gate_dual_passed": r["gate_dual_drift_aware"]["passed"],
+        })
+    return {"window": window, "seed": seed, "rows": rows}
+
+
+def sweep_to_markdown(s: dict) -> str:
+    lines = [
+        f"Recovery vs drift severity (window={s['window']}, seed={s['seed']}):",
+        "",
+        "| p (vocab drift) | detected | recovery ratio | retention ratio | TTR (s) | dual gate |",
+        "|---|---|---|---|---|---|",
+    ]
+    for r in s["rows"]:
+        lines.append(
+            f"| {r['p']:.2f} | {r['detected']} | {r['recovery_ratio']:.3f} | "
+            f"{r['retention_ratio']:.3f} | {r['time_to_recovery_s']:.1f} | "
+            f"{'PASS' if r['gate_dual_passed'] else 'FAIL'} |"
+        )
+    return "\n".join(lines)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="DriftGuard closed-loop recovery measurement")
     parser.add_argument("--p", type=float, default=0.7, help="Fraction of vocabulary that drifts.")
     parser.add_argument("--window", type=int, default=600)
+    parser.add_argument("--sweep-p", default=None,
+                        help="Comma-separated p values for a recovery-vs-severity sweep.")
     args = parser.parse_args(argv)
 
+    here = Path(__file__).resolve().parent
+    if args.sweep_p:
+        ps = [float(x) for x in args.sweep_p.split(",")]
+        result = sweep_p(ps, args.window)
+        out = here / "results_recovery_sweep.json"
+        out.write_text(json.dumps(result, indent=2))
+        print(sweep_to_markdown(result))
+        print(f"\nWrote {out}")
+        return 0
+
     result = run(args.p, args.window)
-    out = Path(__file__).resolve().parent / "results_recovery.json"
+    out = here / "results_recovery.json"
     out.write_text(json.dumps(result, indent=2))
     print(to_markdown(result))
     print(f"\nWrote {out}")

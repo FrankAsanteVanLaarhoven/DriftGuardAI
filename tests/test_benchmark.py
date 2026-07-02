@@ -95,6 +95,18 @@ def test_detector_scorecard_composite_is_a_superset_of_psi():
     assert sc["domain_classifier"]["recall"] > 0.0
 
 
+def test_recovery_and_retention_ratio_formulas():
+    from closed_loop import recovery_ratio, retention_ratio
+
+    # Regains 0.0826 of a 0.0853 drift-induced loss -> ~0.968 recovered.
+    assert abs(recovery_ratio(0.9170, 0.8344, 0.9197) - 0.9683) < 1e-3
+    assert recovery_ratio(0.8344, 0.8344, 0.9197) == 0.0        # no recovery
+    assert recovery_ratio(0.9, 0.9, 0.9) == 0.0                 # degenerate denom, no crash
+    # Retention: candidate keeps 0.8519/0.9197 ~ 0.926 of the old-distribution score.
+    assert retention_ratio(0.9197, 0.9197) == 1.0
+    assert abs(retention_ratio(0.8519, 0.9197) - 0.9263) < 1e-3
+
+
 def test_streaming_abrupt_change_is_detected_quickly():
     _pool()
     from streaming import run

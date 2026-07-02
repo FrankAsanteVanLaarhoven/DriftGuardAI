@@ -107,8 +107,10 @@ benchmark cannot express.
 (a fraction `p` of tokens acquire a new surface form): detect → retrain a candidate on
 the drifted labelled data → baseline gate. Measured run (p=0.7, window 600):
 
-- **Detected** by the domain classifier (AUC 1.0000) in **0.245 s**; PSI blind (0.0142).
-- Retrain **24.4 s** → detection→decision wall time **24.6 s**.
+- **Detected** by the domain classifier (AUC 1.0000) in **0.25 s**; PSI blind (0.0142).
+- Retrain **23.0 s** → **time-to-recovery 24.0 s** (detect + retrain + evaluate).
+- **Recovery ratio 0.968** — regains 96.8% of the drift-induced loss on the new
+  distribution; **retention ratio 0.926** — keeps 92.6% of the old-distribution score.
 
 | macro-F1            | stale primary | retrained candidate |
 |---------------------|---------------|---------------------|
@@ -132,3 +134,23 @@ gate that still evaluates on the fixed holdout **rejects the recovered model**.
 
 `dual` promotes genuine recovery yet still fails closed on catastrophic forgetting.
 Safety intent preserved, recovery unblocked.
+
+## Recovery vs drift severity (`make recovery-sweep`)
+
+Sweeping the vocabulary-drift fraction `p` traces the recovery/retention trade-off
+(window 600, seed 42) → `results_recovery_sweep.json`:
+
+| p (vocab drift) | detected | recovery ratio | retention ratio | TTR (s) | dual gate |
+|-----------------|----------|----------------|-----------------|---------|-----------|
+| 0.30            | True     | 0.879          | **0.984**       | 23.3    | PASS      |
+| 0.50            | True     | 0.952          | 0.969           | 19.9    | PASS      |
+| 0.70            | True     | 0.968          | 0.926           | 23.4    | PASS      |
+| 0.90            | True     | **0.992**      | **0.797**       | 20.8    | **FAIL**  |
+
+**Reading it.** As drift deepens, the retrained candidate recovers *more* on the new
+distribution (recovery ratio 0.879 → 0.992) but retains *less* of the old one (retention
+0.984 → 0.797) — the fundamental adaptation/forgetting trade-off, measured. At `p=0.90`
+retention collapses to 0.797 and the **dual gate fails closed**: the candidate adapted to
+extreme drift by forgetting the original distribution below the forgetting floor, so it is
+*not* promoted. The gate tracks the trade-off exactly — it promotes recovery while it is
+safe (p ≤ 0.70) and refuses it once adaptation turns into catastrophic forgetting.

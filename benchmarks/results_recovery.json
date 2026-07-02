@@ -7,9 +7,16 @@
   "domain_auc": 1.0,
   "psi": 0.014208340177638378,
   "timing_s": {
-    "detection": 0.243,
-    "retrain": 22.154,
-    "detection_to_decision": 22.397
+    "detection": 0.252,
+    "retrain": 22.971,
+    "evaluate": 0.739,
+    "detection_to_decision": 23.223
+  },
+  "recovery": {
+    "time_to_recovery_s": 23.962,
+    "recovery_ratio": 0.9682,
+    "retention_ratio": 0.9262,
+    "orig_clean_macro_f1": 0.9197
   },
   "macro_f1": {
     "stale_on_drift": 0.8344,

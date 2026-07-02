@@ -141,8 +141,10 @@ gradual drift is caught.
 Full self-healing loop, measured end to end: detect → retrain candidate on drifted
 labelled data → baseline gate.
 
-- Detected by the domain classifier (AUC 1.0000) in **0.245 s**; PSI blind (0.0142).
-- Retrain **24.4 s** → detection→decision wall time **24.6 s**.
+- Detected by the domain classifier (AUC 1.0000) in **0.25 s**; PSI blind (0.0142).
+- Retrain **23.0 s** → **time-to-recovery 24.0 s** (detect + retrain + evaluate).
+- **Recovery ratio 0.968** (regains 96.8% of the drift-induced loss on the new
+  distribution); **retention ratio 0.926** (keeps 92.6% of the old-distribution score).
 
 | macro-F1            | stale primary | retrained candidate |
 |---------------------|---------------|---------------------|
@@ -172,6 +174,21 @@ forgetting (a candidate that scored, say, 0.40 on the fixed holdout would be blo
 the floor). This resolves the tension between "never promote a regression" and "adapt
 under concept drift" — safety intent preserved, recovery unblocked. Unit tests cover all
 three modes and both failure directions.
+
+**Recovery vs drift severity (`make recovery-sweep`), source:
+`benchmarks/results_recovery_sweep.json`.** Sweeping the drift fraction `p` traces the
+adaptation/forgetting trade-off — and shows the dual gate tracking it:
+
+| p (vocab drift) | detected | recovery ratio | retention ratio | TTR (s) | dual gate |
+|-----------------|----------|----------------|-----------------|---------|-----------|
+| 0.30            | True     | 0.879          | 0.984           | 23.3    | PASS      |
+| 0.50            | True     | 0.952          | 0.969           | 19.9    | PASS      |
+| 0.70            | True     | 0.968          | 0.926           | 23.4    | PASS      |
+| 0.90            | True     | 0.992          | **0.797**       | 20.8    | **FAIL**  |
+
+Deeper drift → higher recovery on the new distribution but lower retention of the old one.
+At `p=0.90` retention falls to 0.797, adaptation has become catastrophic forgetting, and
+the dual gate **fails closed** — promoting recovery only while it is safe.
 
 ## Container & stack
 
