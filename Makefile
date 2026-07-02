@@ -12,7 +12,7 @@ SERVICE_URL ?= http://localhost:$(PORT)
 
 .PHONY: help install lock lint fmt test data train train-transformer run run-transformer \
 	drift benchmark benchmark-sweep benchmark-stream recovery recovery-sweep \
-	docker stack stack-down demo clean
+	example-tabular docker stack stack-down demo clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -72,6 +72,9 @@ recovery: ## Closed-loop: detect -> retrain -> gate under concept drift (timed, 
 
 recovery-sweep: ## Recovery-vs-severity curve, mean±std over seeds (recovery + retention + TTR)
 	uv run python benchmarks/closed_loop.py --sweep-p 0.3,0.5,0.7,0.9 --seeds 3 --train-sample 40000
+
+example-tabular: ## Second reference instance: the governance framework on Adult (tabular)
+	uv run python examples/tabular_adult.py
 
 docker: ## Build the production image
 	docker build -t $(IMAGE) .

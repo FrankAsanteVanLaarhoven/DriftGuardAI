@@ -59,3 +59,21 @@ verbatim:
 
 Feed the resulting scores to `incumbent_gate` / `promotion_gate` and report
 `recovery_ratio` / `retention_ratio`. Nothing in the governance layer changes.
+
+## 5. Proven: a second instance (tabular)
+
+This is not aspirational — [`examples/tabular_adult.py`](../examples/tabular_adult.py)
+(`make example-tabular`) is a second instance on **OpenML Adult** with a
+**HistGradientBoosting** model and a tabular drift detector (PSI on features + a domain
+classifier). It imports `incumbent_gate`, `promotion_gate`, `recovery_ratio`, and
+`retention_ratio` **unchanged** — a test asserts they are the *same objects* the text
+service uses. As covariate drift deepens, retention falls and the `dual` gate flips from
+PASS to fail-closed, exactly as on text:
+
+| severity | detected | recovery ratio | retention ratio | dual gate |
+|----------|----------|----------------|-----------------|-----------|
+| 0.10     | True     | 0.780          | 0.936           | PASS      |
+| 0.20     | True     | 0.765          | 0.861           | FAIL      |
+| 0.40     | True     | 0.779          | 0.728           | FAIL      |
+
+Same gates, same metrics, same safety behaviour — a different model family and data type.

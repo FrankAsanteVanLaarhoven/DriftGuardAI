@@ -1,0 +1,34 @@
+{
+  "instance": "tabular/adult",
+  "model": "HistGradientBoosting (primary) + LogisticRegression (baseline)",
+  "macro_f1_clean": {
+    "baseline_fixed": 0.7829,
+    "primary_fixed_incumbent": 0.8189,
+    "stale_on_drift": 0.7526,
+    "candidate_on_drift": 0.8043,
+    "candidate_on_fixed": 0.7661
+  },
+  "rows": [
+    {
+      "severity": 0.1,
+      "detected": true,
+      "recovery_ratio": 0.7799,
+      "retention_ratio": 0.9356,
+      "dual_gate_passed": true
+    },
+    {
+      "severity": 0.2,
+      "detected": true,
+      "recovery_ratio": 0.7652,
+      "retention_ratio": 0.8606,
+      "dual_gate_passed": false
+    },
+    {
+      "severity": 0.4,
+      "detected": true,
+      "recovery_ratio": 0.7792,
+      "retention_ratio": 0.7275,
+      "dual_gate_passed": false
+    }
+  ]
+}
