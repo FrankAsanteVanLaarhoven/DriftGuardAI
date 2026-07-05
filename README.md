@@ -129,7 +129,7 @@ companion to the production service in this repo.
 - `docs/DEMO_SCRIPT.md` — **a 6–8 min live demo runbook** (pre-flight, commands, talking points,
   Q&A prep, one-page cheat-sheet) for walking a reviewer through the governance story.
 - `docs/DEMO_SLIDES.md` — a **7-slide outline** mirroring the runbook (content · show · say).
-- `CLAUDE.md` — repository conventions and guardrails.
+- `AGENTS.md` — repository conventions and guardrails.
 - `deploy/terraform/README.md` — exact AWS `apply` + `kubeconfig` steps.
 - `docs/DISTILBERT.md` — GPU runbook for the DistilBERT primary (linear model as fallback).
 - `benchmarks/README.md` — drift-injection benchmark, severity sweep, and closed-loop recovery.

@@ -7,13 +7,13 @@
   "domain_auc": 1.0,
   "psi": 0.014208340177638378,
   "timing_s": {
-    "detection": 0.252,
-    "retrain": 22.971,
-    "evaluate": 0.739,
-    "detection_to_decision": 23.223
+    "detection": 0.271,
+    "retrain": 24.268,
+    "evaluate": 0.762,
+    "detection_to_decision": 24.538
   },
   "recovery": {
-    "time_to_recovery_s": 23.962,
+    "time_to_recovery_s": 25.301,
     "recovery_ratio": 0.9682,
     "retention_ratio": 0.9262,
     "orig_clean_macro_f1": 0.9197
@@ -37,5 +37,10 @@
     "passed": true,
     "reason": "refreshed 0.9170 >= 0.7993+0.0000; fixed-floor 0.8519 >= 0.8456 (baseline 0.8956 - floor 0.0500)",
     "regression_floor": 0.05
+  },
+  "safety": {
+    "safe_to_promote": true,
+    "retention_floor": 0.9,
+    "retention_ratio": 0.9262
   }
 }

@@ -40,7 +40,12 @@ from driftguard.data import load_split  # noqa: E402
 
 # Adaptation-safety metrics live in the model-agnostic governance layer; re-exported here
 # so `from closed_loop import recovery_ratio` keeps working.
-from driftguard.governance import recovery_ratio, retention_ratio  # noqa: E402,F401
+from driftguard.governance import (  # noqa: E402,F401
+    promotion_decision_quality,
+    recovery_ratio,
+    retention_ratio,
+    safe_promotion_oracle,
+)
 
 
 def _tok_hash(word: str) -> int:
@@ -58,7 +63,8 @@ def _macro_f1(pipeline, texts: list[str], labels: list[int]) -> float:
 
 
 def run(p: float = 0.7, window: int = 600, seed: int = 42,
-        train_sample: int | None = None) -> dict:
+        train_sample: int | None = None,
+        safety_retention_floor: float = 0.90) -> dict:
     settings = get_settings()
     train = load_split("train", settings)
     test = load_split("test", settings)
@@ -121,6 +127,13 @@ def run(p: float = 0.7, window: int = 600, seed: int = 42,
         regression_floor=settings.gate_regression_floor,
     )
 
+    # Ground-truth safety label (benchmark-only oracle): the candidate must not regress
+    # the incumbent on the new distribution AND must keep >= floor of its old-distribution
+    # score. Gate decisions are scored against this in the sweep.
+    safe = safe_promotion_oracle(cand_drift_f1, stale_drift_f1,
+                                 cand_fixed_f1, stale_fixed_f1,
+                                 retention_floor=safety_retention_floor)
+
     return {
         "scenario": f"vocab_concept_drift(p={p})",
         "detected": det["drift"],
@@ -151,6 +164,9 @@ def run(p: float = 0.7, window: int = 600, seed: int = 42,
                                    "reason": gate_refreshed.reason},
         "gate_dual_drift_aware": {"passed": gate_dual.passed, "reason": gate_dual.reason,
                                   "regression_floor": settings.gate_regression_floor},
+        "safety": {"safe_to_promote": safe,
+                   "retention_floor": safety_retention_floor,
+                   "retention_ratio": round(ret_ratio, 4)},
     }
 
 
@@ -178,26 +194,42 @@ def to_markdown(r: dict) -> str:
         f" — {r['gate_refreshed_holdout']['reason']}",
         f"Gate DUAL (drift-aware) : {'PASS' if r['gate_dual_drift_aware']['passed'] else 'FAIL'}"
         f" — {r['gate_dual_drift_aware']['reason']}",
+        f"Ground-truth safety     : "
+        f"{'SAFE' if r['safety']['safe_to_promote'] else 'UNSAFE'} to promote "
+        f"(retention {r['safety']['retention_ratio']:.3f} vs floor "
+        f"{r['safety']['retention_floor']:.2f})",
     ])
 
 
 def sweep_p(ps: list[float], window: int = 600, seeds: int = 3,
-            train_sample: int | None = 40000) -> dict:
+            train_sample: int | None = 40000,
+            safety_retention_floor: float = 0.90) -> dict:
     """Recovery vs drift severity across `seeds` seeds per point, reported as mean ± std.
 
     Each seed retrains on a different sub-sample of the drifted data (``train_sample``),
     so the recovery/retention figures carry genuine variation rather than a single number.
+    Every trial is also labelled by the ground-truth safety oracle, and each gate mode's
+    promote/block decisions are scored against it (promotion precision / recall / unsafe
+    promotion rate) across the whole sweep.
     """
+    gate_modes = ("fixed", "refreshed", "dual")
+    decisions: dict[str, list[tuple[bool, bool]]] = {mode: [] for mode in gate_modes}
     rows = []
     for p in ps:
-        recs, rets, ttrs, dual = [], [], [], []
+        recs, rets, ttrs, dual, safes = [], [], [], [], []
         for s in range(seeds):
-            r = run(p=p, window=window, seed=1000 + s, train_sample=train_sample)
+            r = run(p=p, window=window, seed=1000 + s, train_sample=train_sample,
+                    safety_retention_floor=safety_retention_floor)
             rec = r["recovery"]
             recs.append(rec["recovery_ratio"])
             rets.append(rec["retention_ratio"])
             ttrs.append(rec["time_to_recovery_s"])
             dual.append(r["gate_dual_drift_aware"]["passed"])
+            safe = r["safety"]["safe_to_promote"]
+            safes.append(safe)
+            decisions["fixed"].append((r["gate_fixed_holdout"]["passed"], safe))
+            decisions["refreshed"].append((r["gate_refreshed_holdout"]["passed"], safe))
+            decisions["dual"].append((r["gate_dual_drift_aware"]["passed"], safe))
         rows.append({
             "p": p, "seeds": seeds,
             "recovery_ratio_mean": round(statistics.mean(recs), 4),
@@ -206,8 +238,16 @@ def sweep_p(ps: list[float], window: int = 600, seeds: int = 3,
             "retention_ratio_std": round(statistics.pstdev(rets), 4),
             "time_to_recovery_s_mean": round(statistics.mean(ttrs), 2),
             "dual_gate_pass_fraction": round(sum(dual) / len(dual), 2),
+            "safe_fraction": round(sum(safes) / len(safes), 2),
         })
-    return {"window": window, "seeds": seeds, "train_sample": train_sample, "rows": rows}
+    quality = {mode: promotion_decision_quality(decisions[mode]) for mode in gate_modes}
+    for q in quality.values():
+        for key in ("promotion_precision", "promotion_recall", "unsafe_promotion_rate"):
+            if q[key] is not None:
+                q[key] = round(q[key], 4)
+    return {"window": window, "seeds": seeds, "train_sample": train_sample,
+            "safety_retention_floor": safety_retention_floor, "rows": rows,
+            "decision_quality": quality}
 
 
 def sweep_to_markdown(s: dict) -> str:
@@ -216,15 +256,33 @@ def sweep_to_markdown(s: dict) -> str:
         f"retrain sub-sample={s['train_sample']}):",
         "",
         "| p (vocab drift) | recovery ratio (mean±std) | retention ratio (mean±std) "
-        "| TTR (s) | dual gate (pass frac) |",
-        "|---|---|---|---|---|",
+        "| TTR (s) | dual gate (pass frac) | safe frac |",
+        "|---|---|---|---|---|---|",
     ]
     for r in s["rows"]:
         lines.append(
             f"| {r['p']:.2f} | {r['recovery_ratio_mean']:.3f} ± {r['recovery_ratio_std']:.3f} "
             f"| {r['retention_ratio_mean']:.3f} ± {r['retention_ratio_std']:.3f} "
-            f"| {r['time_to_recovery_s_mean']:.1f} | {r['dual_gate_pass_fraction']:.2f} |"
+            f"| {r['time_to_recovery_s_mean']:.1f} | {r['dual_gate_pass_fraction']:.2f} "
+            f"| {r['safe_fraction']:.2f} |"
         )
+    if "decision_quality" in s:
+        lines += [
+            "",
+            f"Promotion decision quality vs ground-truth safety oracle "
+            f"(retention floor {s['safety_retention_floor']:.2f}, all trials):",
+            "",
+            "| gate mode | promotions | unsafe promotions | promotion precision "
+            "| promotion recall | unsafe promotion rate |",
+            "|---|---|---|---|---|---|",
+        ]
+        for mode, q in s["decision_quality"].items():
+            fmt = lambda v: "n/a" if v is None else f"{v:.2f}"  # noqa: E731
+            lines.append(
+                f"| {mode} | {q['promotions']}/{q['trials']} | {q['unsafe_promotions']} "
+                f"| {fmt(q['promotion_precision'])} | {fmt(q['promotion_recall'])} "
+                f"| {fmt(q['unsafe_promotion_rate'])} |"
+            )
     return "\n".join(lines)
 
 
@@ -238,19 +296,24 @@ def main(argv: list[str] | None = None) -> int:
                         help="Seeds per sweep point (mean ± std).")
     parser.add_argument("--train-sample", type=int, default=40000,
                         help="Drifted-data retrain sub-sample per seed (for variation).")
+    parser.add_argument("--safety-retention-floor", type=float, default=0.90,
+                        help="Ground-truth oracle: min share of the incumbent's "
+                             "original-distribution score a safe candidate must keep.")
     args = parser.parse_args(argv)
 
     here = Path(__file__).resolve().parent
     if args.sweep_p:
         ps = [float(x) for x in args.sweep_p.split(",")]
-        result = sweep_p(ps, args.window, args.seeds, args.train_sample)
+        result = sweep_p(ps, args.window, args.seeds, args.train_sample,
+                         args.safety_retention_floor)
         out = here / "results_recovery_sweep.json"
         out.write_text(json.dumps(result, indent=2))
         print(sweep_to_markdown(result))
         print(f"\nWrote {out}")
         return 0
 
-    result = run(args.p, args.window)
+    result = run(args.p, args.window,
+                 safety_retention_floor=args.safety_retention_floor)
     out = here / "results_recovery.json"
     out.write_text(json.dumps(result, indent=2))
     print(to_markdown(result))

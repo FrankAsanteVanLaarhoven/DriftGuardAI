@@ -2,6 +2,7 @@
   "window": 600,
   "seeds": 3,
   "train_sample": 40000,
+  "safety_retention_floor": 0.9,
   "rows": [
     {
       "p": 0.3,
@@ -10,8 +11,9 @@
       "recovery_ratio_std": 0.1022,
       "retention_ratio_mean": 0.9745,
       "retention_ratio_std": 0.0027,
-      "time_to_recovery_s_mean": 15.27,
-      "dual_gate_pass_fraction": 1.0
+      "time_to_recovery_s_mean": 17.34,
+      "dual_gate_pass_fraction": 1.0,
+      "safe_fraction": 1.0
     },
     {
       "p": 0.5,
@@ -20,8 +22,9 @@
       "recovery_ratio_std": 0.0269,
       "retention_ratio_mean": 0.9608,
       "retention_ratio_std": 0.0026,
-      "time_to_recovery_s_mean": 14.92,
-      "dual_gate_pass_fraction": 1.0
+      "time_to_recovery_s_mean": 16.28,
+      "dual_gate_pass_fraction": 1.0,
+      "safe_fraction": 1.0
     },
     {
       "p": 0.7,
@@ -30,8 +33,9 @@
       "recovery_ratio_std": 0.0106,
       "retention_ratio_mean": 0.9235,
       "retention_ratio_std": 0.0072,
-      "time_to_recovery_s_mean": 16.14,
-      "dual_gate_pass_fraction": 0.67
+      "time_to_recovery_s_mean": 16.98,
+      "dual_gate_pass_fraction": 0.67,
+      "safe_fraction": 1.0
     },
     {
       "p": 0.9,
@@ -40,8 +44,38 @@
       "recovery_ratio_std": 0.0027,
       "retention_ratio_mean": 0.7875,
       "retention_ratio_std": 0.0192,
-      "time_to_recovery_s_mean": 16.4,
-      "dual_gate_pass_fraction": 0.0
+      "time_to_recovery_s_mean": 17.67,
+      "dual_gate_pass_fraction": 0.0,
+      "safe_fraction": 0.0
     }
-  ]
+  ],
+  "decision_quality": {
+    "fixed": {
+      "trials": 12,
+      "promotions": 2,
+      "unsafe_promotions": 0,
+      "safe_candidates": 9,
+      "promotion_precision": 1.0,
+      "promotion_recall": 0.2222,
+      "unsafe_promotion_rate": 0.0
+    },
+    "refreshed": {
+      "trials": 12,
+      "promotions": 12,
+      "unsafe_promotions": 3,
+      "safe_candidates": 9,
+      "promotion_precision": 0.75,
+      "promotion_recall": 1.0,
+      "unsafe_promotion_rate": 0.25
+    },
+    "dual": {
+      "trials": 12,
+      "promotions": 8,
+      "unsafe_promotions": 0,
+      "safe_candidates": 9,
+      "promotion_precision": 1.0,
+      "promotion_recall": 0.8889,
+      "unsafe_promotion_rate": 0.0
+    }
+  }
 }

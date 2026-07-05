@@ -153,12 +153,15 @@ Sweeping the vocabulary-drift fraction `p` across **3 seeds** — each retrainin
 40k-row sub-sample of the drifted data, so the figures carry genuine variation — traces
 the recovery/retention trade-off (window 600) → `results_recovery_sweep.json`:
 
-| p (vocab drift) | recovery ratio (mean±std) | retention ratio (mean±std) | TTR (s) | dual gate (pass frac) |
-|-----------------|---------------------------|----------------------------|---------|-----------------------|
-| 0.30            | 0.352 ± 0.102             | **0.975 ± 0.003**          | 15.3    | 1.00                  |
-| 0.50            | 0.726 ± 0.027             | 0.961 ± 0.003              | 14.9    | 1.00                  |
-| 0.70            | 0.856 ± 0.011             | 0.923 ± 0.007              | 16.1    | 0.67                  |
-| 0.90            | **0.930 ± 0.003**         | **0.787 ± 0.019**          | 16.4    | **0.00**              |
+| p (vocab drift) | recovery ratio (mean±std) | retention ratio (mean±std) | TTR (s) | dual gate (pass frac) | safe frac |
+|-----------------|---------------------------|----------------------------|---------|-----------------------|-----------|
+| 0.30            | 0.352 ± 0.102             | **0.975 ± 0.003**          | 17.3    | 1.00                  | 1.00      |
+| 0.50            | 0.726 ± 0.027             | 0.961 ± 0.003              | 16.3    | 1.00                  | 1.00      |
+| 0.70            | 0.856 ± 0.011             | 0.923 ± 0.007              | 17.0    | 0.67                  | 1.00      |
+| 0.90            | **0.930 ± 0.003**         | **0.787 ± 0.019**          | 17.7    | **0.00**              | **0.00**  |
+
+(`safe frac` = fraction of trials the ground-truth safety oracle labels safe to promote —
+see the next section.)
 
 **Reading it.** Retention falls monotonically as drift deepens (0.975 → 0.787): heavier
 drift forces the candidate to give up more of the old distribution. The **dual gate tracks
@@ -170,3 +173,39 @@ light drift causes little accuracy loss, so the ratio divides two nearby numbers
 system is healthy there (retention 0.975, gate passes), the *statistic* is just unstable.
 (The sweep sub-samples 40k rows per seed to expose variance; the full-data single run
 above recovers more — 0.968 at p=0.7.)
+
+## Promotion decision quality (`make recovery-sweep`)
+
+The sweep also scores each gate mode as a *decision-maker*. Every trial gets a
+ground-truth safety label from `driftguard.governance.safe_promotion_oracle`: a
+promotion is **safe** iff the candidate (a) is at least as good as the incumbent on the
+**new** distribution and (b) keeps ≥ 0.90 of the incumbent's **original**-distribution
+score (`--safety-retention-floor`). The oracle needs both models scored on both
+distributions, so it exists only in the benchmark; the production gates approximate it
+from committed baselines. Each gate's promote/block decisions over all 12 trials
+(4 severities × 3 seeds) are then scored by
+`driftguard.governance.promotion_decision_quality`:
+
+- **promotion precision** — of the promotions, the fraction that were safe;
+- **promotion recall** — of the genuinely safe candidates, the fraction promoted.
+  A gate that blocks everything has perfect precision and zero recall, so the two are
+  only meaningful together;
+- **unsafe promotion rate** — unsafe promotions over all trials ("how often did it ship
+  a regressive model").
+
+Measured (window 600, 3 seeds, retention floor 0.90):
+
+| gate mode | promotions | unsafe promotions | promotion precision | promotion recall | unsafe promotion rate |
+|-----------|------------|-------------------|---------------------|------------------|-----------------------|
+| fixed     | 2/12       | 0                 | 1.00                | 0.22             | 0.00                  |
+| refreshed | 12/12      | 3                 | **0.75**            | 1.00             | **0.25**              |
+| **dual**  | 8/12       | **0**             | **1.00**            | **0.89**         | **0.00**              |
+
+**Reading it.** This is the governance argument as one table. The **fixed** gate never
+ships an unsafe model but blocks 7 of the 9 safe recoveries (recall 0.22) — safety by
+refusing to adapt. The **refreshed** gate promotes every candidate that recovered on the
+new distribution, including all three catastrophic-forgetting candidates at `p=0.90` —
+its 0.25 unsafe promotion rate is precisely the *recovery-is-not-safety* failure mode.
+The **dual** gate ships **zero** unsafe models *and* promotes 8 of the 9 safe candidates;
+its single miss is a `p=0.70` boundary seed it conservatively blocks. The cost of
+fail-closed is now a measured number (0.11 of recall), not a claim.

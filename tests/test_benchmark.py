@@ -107,6 +107,48 @@ def test_recovery_and_retention_ratio_formulas():
     assert abs(retention_ratio(0.8519, 0.9197) - 0.9263) < 1e-3
 
 
+def test_safe_promotion_oracle_labels():
+    from driftguard.governance import safe_promotion_oracle
+
+    # The measured p=0.7 full-data run: recovers on drift, retention 0.926 >= 0.90 floor.
+    assert safe_promotion_oracle(0.9170, 0.8344, 0.8519, 0.9197) is True
+    # Catastrophic forgetting (retention ~0.787, the p=0.9 regime) is unsafe even though
+    # the candidate wins on the new distribution.
+    assert safe_promotion_oracle(0.9300, 0.8000, 0.7238, 0.9197) is False
+    # Regressing the incumbent on live (new-distribution) traffic is unsafe outright.
+    assert safe_promotion_oracle(0.8000, 0.8344, 0.9100, 0.9197) is False
+    # The floor is a parameter: relaxing it flips the forgetting verdict.
+    assert safe_promotion_oracle(0.9300, 0.8000, 0.7238, 0.9197,
+                                 retention_floor=0.75) is True
+
+
+def test_promotion_decision_quality_scoring():
+    from driftguard.governance import promotion_decision_quality
+
+    q = promotion_decision_quality([
+        (True, True), (True, True), (True, False),   # 3 promotions, 1 unsafe
+        (False, True),                                # a safe candidate blocked
+        (False, False),                               # an unsafe candidate blocked
+    ])
+    assert q["trials"] == 5 and q["promotions"] == 3
+    assert q["unsafe_promotions"] == 1 and q["safe_candidates"] == 3
+    assert abs(q["promotion_precision"] - 2 / 3) < 1e-9
+    assert abs(q["promotion_recall"] - 2 / 3) < 1e-9
+    assert abs(q["unsafe_promotion_rate"] - 1 / 5) < 1e-9
+
+    # A gate that never promotes: precision undefined, zero unsafe rate, zero recall.
+    q0 = promotion_decision_quality([(False, True), (False, False)])
+    assert q0["promotion_precision"] is None
+    assert q0["unsafe_promotion_rate"] == 0.0
+    assert q0["promotion_recall"] == 0.0
+
+    # No safe candidate exists: recall undefined, every promotion is unsafe.
+    q1 = promotion_decision_quality([(True, False), (False, False)])
+    assert q1["promotion_recall"] is None
+    assert q1["promotion_precision"] == 0.0
+    assert q1["unsafe_promotion_rate"] == 0.5
+
+
 def test_streaming_abrupt_change_is_detected_quickly():
     _pool()
     from streaming import run
