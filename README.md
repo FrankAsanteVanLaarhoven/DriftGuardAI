@@ -23,6 +23,25 @@ It ships as two layers:
   HistGradientBoosting), and **embeddings** (20 Newsgroups / MiniLM) — all reusing the *same*
   governance and detector code, unchanged.
 
+## Measured, not claimed
+
+Every headline number below is reproduced from a fixed seed and committed with its
+result file — assembled in [`docs/DRIFTGUARDBENCH.md`](docs/DRIFTGUARDBENCH.md)
+(**DriftGuardBench v0.1**, the eight-metric safe-promotion report):
+
+| What | Measured |
+|---|---|
+| Drift detection (9 drift kinds × 5 seeds) | **1.00 F1 @ 0.00 FPR** — the only tool at 1.00/0.00 in a same-protocol head-to-head (Evidently 0.86 · scipy-KS 0.93 · NannyML 100% false alarms) |
+| Promotion decision quality (vs a ground-truth safety oracle) | **precision 1.00 · recall 0.89 · unsafe promotion rate 0.00** — a refreshed-only gate ships 25% unsafe |
+| Recovery / retention (vocab concept drift p=0.7) | **0.968 / 0.926**, with the full severity frontier and slice + calibration decomposition |
+| Fallback survival | **1248/1248 HTTP 200** through a broken canary deploy; six chaos modes incl. a *hanging* registry |
+| Canary auto-rollback (Helm, no mesh/Argo) | **50 s** breach→rollback, audit-annotated, measured in a live drill |
+
+The honest arcs are published too: the first head-to-head run had a classical baseline
+*beating* our composite (we absorbed the method, then added the drift kind it is
+structurally blind to), and the rollback drill uncovered a real startup bug (now fixed
+and chaos-tested).
+
 Two resilience guarantees sit at the core of the reference service:
 
 - **Operational fallback.** A tiny, dependency-light baseline model
@@ -34,6 +53,13 @@ Two resilience guarantees sit at the core of the reference service:
   **`max(baseline, incumbent primary)`** on a holdout by a configurable margin — never the
   tiny baseline alone. CI and the retrain pipeline **fail closed**; a regression *or a
   downgrade* is never promoted.
+
+Every promotion decision is exported as a **sealed, versioned `PromotionDecisionRecord`**
+(fail-closed derived outcome, tamper-evident SHA-256, human gate as a first-class result)
+plus a lightweight **`PromotionProposal`** for external executors — plain JSON, zero shared
+libraries. The handoff is proven end to end: a
+[VerdictPlane](https://github.com/FrankAsanteVanLaarhoven/VerdictPlane) intake consumes,
+governs, and ledgers these proposals in its own test suite.
 
 ## Quick start (local)
 
@@ -120,8 +146,13 @@ companion to the production service in this repo.
   descriptor-KS / composite), reused across text, tabular, and embeddings with no new
   detector code.
 - `docs/PROMOTION_DECISION.md` — **the versioned promotion-decision wire contract**
-  (`PromotionDecisionRecord` v1.0.0): fail-closed derived decisions, human gate as a
-  first-class outcome, advisory risk report, tamper-evident audit hash.
+  (`PromotionDecisionRecord` v1.1.0 + the `PromotionProposal` executor view): fail-closed
+  derived decisions, derived risk summaries, human gate as a first-class outcome,
+  tamper-evident audit hash.
+- `docs/PROMOTION_PROPOSAL_INTAKE.md` — **the consumer-side integration guide** (built for
+  the VerdictPlane pilot): 5-step validation contract, library glue, default-deny policy,
+  committed fixture, and the acceptance check — implemented and passing in VerdictPlane's
+  own suite.
 - `examples/` — **reference instances** proving the framework generalises: a **tabular**
   model on OpenML Adult (`make example-tabular`) and an **embedding** model on 20 Newsgroups
   (`make example-embedding`) reuse the same gates, metrics, and detectors as text — three
@@ -153,10 +184,15 @@ models/baseline.joblib  artifacts/{metrics,baseline_metrics,reference}.json
 
 ## Status
 
-Built phase by phase; each phase has acceptance criteria that must pass before the
-next. Local phases (data → train → serve → stack → drift) run end to end. AWS
-provisioning is real Terraform that applies **with your credentials** — nothing is
-faked; the exact `apply` steps are documented in `deploy/terraform/README.md`.
+**All original blueprint deliverables are shipped and measured**: multi-layer detection
+(head-to-head published, including the round we lost), promotion decision-quality
+metrics, slice + calibration governance, Helm chart with canary + drilled 50 s
+auto-rollback, the sealed promotion-decision contract with a proven external consumer,
+and the assembled DriftGuardBench v0.1 report. Built phase by phase with acceptance
+criteria; the full suite (unit + integration + chaos + chart + contract tests) is green.
+AWS provisioning is real Terraform that applies **with your credentials** — nothing is
+faked; the exact `apply` steps are in `deploy/terraform/README.md`. Stated next axes:
+a second real dataset, label-delay-aware detection, cloud-scale drill.
 
 ## License
 Apache-2.0. Copyright 2026 Frank Asante Van Laarhoven.
