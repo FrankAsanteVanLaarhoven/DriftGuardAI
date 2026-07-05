@@ -98,6 +98,82 @@ def _consumer():
     return consume_decision
 
 
+def test_v1_0_records_without_the_new_fields_still_parse():
+    # Simulate a record sealed by a 1.0.0 producer: strip the 1.1 additions.
+    payload = json.loads(contract.to_json(_record()))
+    for field in ("risk_level", "reason_summary", "proposed_by"):
+        payload.pop(field)
+    payload["schema_version"] = "1.0.0"
+    payload["content_hash"] = contract._hashed(payload)
+    parsed = parse_record(payload)
+    assert parsed.decision == contract.DECISION_HOLD_FOR_HUMAN
+    assert parsed.risk_level is None            # defaults fill in, nothing breaks
+    assert parsed.proposed_by == "driftguard"
+
+
+def test_risk_level_is_derived_from_gates_not_asserted():
+    from driftguard.contract import derive_risk_level
+
+    req_pass = GateOutcome("dual", True, True, "")
+    req_fail = GateOutcome("dual", False, True, "")
+    adv_fail = GateOutcome("slice", False, False, "")
+    adv_pass = GateOutcome("cal", True, False, "")
+
+    assert derive_risk_level([req_fail]) == contract.RISK_HIGH          # blocked
+    assert derive_risk_level([adv_pass]) == contract.RISK_HIGH          # no required gate
+    assert derive_risk_level([req_pass, adv_pass]) == contract.RISK_LOW
+    assert derive_risk_level([req_pass, adv_fail]) == contract.RISK_MEDIUM
+    assert derive_risk_level([req_pass, adv_fail, adv_fail]) == contract.RISK_HIGH
+
+    record = _record()   # dual passes, one advisory failure
+    assert record.risk_level == contract.RISK_MEDIUM
+    assert "advisory failures: slice_fixed" in record.reason_summary
+
+
+def test_action_proposal_maps_decisions_and_pins_the_record():
+    from driftguard.contract import ACTION_BY_DECISION, build_promotion_proposal
+
+    record = _record()
+    proposal = build_promotion_proposal(record, record_path="artifacts/x.json")
+    assert proposal.action == "require_human_review"
+    assert proposal.requires_human is True
+    assert proposal.evidence_ref["decision_id"] == record.decision_id
+    assert proposal.evidence_ref["content_hash"] == record.content_hash
+    assert proposal.evidence_ref["path"] == "artifacts/x.json"
+    assert proposal.risk_level == record.risk_level
+    assert proposal.target == record.candidate
+
+    auto = build_promotion_proposal(_record(human_required=False))
+    assert auto.action == "promote_model" and auto.requires_human is False
+
+    blocked = build_promotion_proposal(_record(gates=_gates(dual_passed=False)))
+    assert blocked.action == "block_deployment" and blocked.risk_level == contract.RISK_HIGH
+    # Every decision has a defined action — no gaps for a consumer to hit.
+    assert set(ACTION_BY_DECISION) == {contract.DECISION_PROMOTE, contract.DECISION_BLOCK,
+                                       contract.DECISION_HOLD_FOR_HUMAN}
+
+
+def test_governed_action_shape_for_verdictplane():
+    """The adapter emits exactly the plain-dict shape VerdictPlane's govern()/Action
+    accepts (tool/effect/args/agent/context), with policy-matchable dotted paths."""
+    from driftguard.contract import build_promotion_proposal, proposal_to_governed_action
+
+    proposal = build_promotion_proposal(_record(), record_path="artifacts/x.json")
+    action = proposal_to_governed_action(proposal)
+    assert set(action) == {"tool", "effect", "args", "agent", "context"}
+    assert action["tool"] == "require_human_review"
+    assert action["effect"] == "write"
+    assert action["agent"] == "driftguard"
+    # The fields a pilot policy keys on, addressable as args.<dotted-path>:
+    assert action["args"]["risk_level"] == proposal.risk_level
+    assert action["args"]["requires_human"] is True
+    assert action["args"]["evidence_ref"]["content_hash"] == _record().content_hash or \
+        "content_hash" in action["args"]["evidence_ref"]
+    assert action["args"]["proposal_id"] == proposal.proposal_id
+    # JSON-serializable end to end (the ledger stores plain JSON records).
+    json.dumps(action)
+
+
 def test_stdlib_reference_consumer_agrees_with_the_library():
     consumer = _consumer()
     payload = json.loads(contract.to_json(_record()))

@@ -72,3 +72,8 @@ the [`PromotionDecisionRecord`](../docs/PROMOTION_DECISION.md) wire contract: ze
 driftguard imports, three checks (schema major, content hash, fail-closed derivation),
 CI-friendly exit codes. `make train` emits a real record to
 `artifacts/promotion_decision.json`; point this script at it.
+
+[`verdictplane_handoff.py`](verdictplane_handoff.py) — the executor handoff: verifies a
+sealed record, derives the lightweight `PromotionProposal` (what to do, to what, at what
+risk, where the proof lives), and emits the JSON a VerdictPlane-style decision system
+receives.

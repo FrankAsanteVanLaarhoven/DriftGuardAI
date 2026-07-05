@@ -1,0 +1,21 @@
+{
+  "schema_version": "1.0.0",
+  "proposal_id": "189f0095-a321-4bb2-893a-7eb291770efe",
+  "created_at": "2026-07-05T14:56:59Z",
+  "source": "driftguard",
+  "action": "promote_model",
+  "target": {
+    "kind": "trained_candidate",
+    "algo": "tfidf(1,2)+logreg",
+    "seed": 42,
+    "mlflow_version": 6
+  },
+  "risk_level": "low",
+  "reason": "promote: 1/1 required gate(s) passed; no advisory failures",
+  "evidence_ref": {
+    "decision_id": "f1380718-835b-4e28-bd31-d5dec0072d33",
+    "content_hash": "e39b5d7655f6f04519417c8edde6b4bdcc64d6f658166ca9af84a17e3a7ecc53",
+    "path": "artifacts/promotion_decision.json"
+  },
+  "requires_human": false
+}

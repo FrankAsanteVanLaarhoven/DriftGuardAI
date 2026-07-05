@@ -1,4 +1,4 @@
-# The PromotionDecisionRecord wire contract (v1.0.0)
+# The PromotionDecisionRecord wire contract (v1.1.0)
 
 The exportable, auditable artifact of one promotion decision — the seam between
 DriftGuard (*does the candidate qualify?*) and any external promotion executor: a CI
@@ -37,6 +37,10 @@ Tests: [`tests/test_contract.py`](../tests/test_contract.py)
   "policy":   {"required_gates": ["dual_drift_aware"], "human_required": true},
   "evidence": {"results": "benchmarks/results_recovery.json", ...},
   "framework": {"name": "driftguard", "version": "0.1.0"},
+  // --- 1.1 additive convenience fields (optional; 1.0 records omit them) ---
+  "risk_level": "medium",              // DERIVED from gates — see rule 6
+  "reason_summary": "hold_for_human: 1/1 required gate(s) passed; advisory failures: slice_fixed",
+  "proposed_by": "driftguard",
   "content_hash": "<sha256 of canonical JSON with this field empty>"
 }
 ```
@@ -64,6 +68,13 @@ Tests: [`tests/test_contract.py`](../tests/test_contract.py)
 5. **Multi-signal, open-ended.** `signals` carries whatever the gates consumed —
    aggregate scores, recovery/retention, slices, ECE, drift attribution — and
    producers may add custom keys freely (rule 4 makes that safe).
+6. **Summaries never outrank gates.** The 1.1 convenience fields are *derived*:
+   `risk_level` follows a fixed rule (required-gate failure or no required gate ⇒
+   `high`; else 0/1/≥2 advisory failures ⇒ `low`/`medium`/`high`), `reason_summary`
+   condenses the gate reasons. They exist for triage and logs; a consumer that acts
+   on them without honouring rule 1 is out of contract. (There is deliberately **no**
+   `action` field on the record — an assertable action that could disagree with the
+   derived `decision` would undo rule 1. Actions live on the `PromotionProposal` view.)
 
 ## Research grounding
 
@@ -112,6 +123,48 @@ identical verdicts and reject identical tampering.
 ```bash
 uv run python examples/consume_decision.py artifacts/promotion_decision.json
 ```
+
+## PromotionProposal — the executor-facing view (v1.0.0)
+
+A decision system like VerdictPlane does not need the full record to *route* work; it
+needs what to do, to what, at what risk, and where the proof lives.
+`build_promotion_proposal(record)` derives exactly that:
+
+```jsonc
+{
+  "schema_version": "1.0.0",
+  "proposal_id": "<uuid4>",
+  "created_at": "2026-07-05T13:43:27Z",
+  "source": "driftguard",
+  "action": "require_human_review",   // promote_model | block_deployment | require_human_review
+  "target": { /* the record's candidate identity (or an explicit override) */ },
+  "risk_level": "medium",
+  "reason": "hold_for_human: 1/1 required gate(s) passed; advisory failures: slice_fixed",
+  "evidence_ref": {"decision_id": "…", "content_hash": "…", "path": "artifacts/promotion_decision.json"},
+  "requires_human": true
+}
+```
+
+Properties, by design:
+
+- **Zero authority.** The mapping is deterministic (`decision → action` via a fixed
+  table; risk and reason are the record's derived fields), so a proposal is always
+  recomputable from its record. `evidence_ref` pins the sealed record; a consumer that
+  wants proof follows the reference and runs the three record checks.
+- **Two intakes, deliberately.** VerdictPlane's WWT pilot defines its own
+  `ActionProposal` (adopted verbatim from Sentinel: incident-centric — `incident`,
+  `root_service`, `evidence_grounding`, runtime-remediation actions like
+  `rollback_change`/`restart_service`). A model-promotion decision does not fit those
+  semantics, so DriftGuard's intake is this **differently-named, domain-specific**
+  `PromotionProposal` — no field abuse, no schema collision, and VerdictPlane routes
+  the two by name.
+- [`examples/verdictplane_handoff.py`](../examples/verdictplane_handoff.py) is the
+  end-to-end handoff: verify record → derive proposal → emit JSON, with the same
+  CI-friendly exit codes as the reference consumer.
+- [`PROMOTION_PROPOSAL_INTAKE.md`](PROMOTION_PROPOSAL_INTAKE.md) is the
+  **implementation guide for the consuming side** (VerdictPlane): the 5-step
+  validation contract, policy semantics per action, a committed fixture, and the
+  acceptance check that clears this branch's merge criterion.
 
 ## Independence guarantees
 
