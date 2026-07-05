@@ -161,6 +161,10 @@ Properties, by design:
 - [`examples/verdictplane_handoff.py`](../examples/verdictplane_handoff.py) is the
   end-to-end handoff: verify record → derive proposal → emit JSON, with the same
   CI-friendly exit codes as the reference consumer.
+- [`PROMOTION_PROPOSAL_INTAKE.md`](PROMOTION_PROPOSAL_INTAKE.md) is the
+  **implementation guide for the consuming side** (VerdictPlane): the 5-step
+  validation contract, policy semantics per action, a committed fixture, and the
+  acceptance check that clears this branch's merge criterion.
 
 ## Independence guarantees
 
