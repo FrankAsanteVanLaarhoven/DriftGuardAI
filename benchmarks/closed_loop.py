@@ -41,10 +41,13 @@ from driftguard.data import load_split  # noqa: E402
 # Adaptation-safety metrics live in the model-agnostic governance layer; re-exported here
 # so `from closed_loop import recovery_ratio` keeps working.
 from driftguard.governance import (  # noqa: E402,F401
+    calibration_gate,
+    expected_calibration_error,
     promotion_decision_quality,
     recovery_ratio,
     retention_ratio,
     safe_promotion_oracle,
+    slice_gate,
 )
 
 
@@ -134,6 +137,26 @@ def run(p: float = 0.7, window: int = 600, seed: int = 42,
                                  cand_fixed_f1, stale_fixed_f1,
                                  retention_floor=safety_retention_floor)
 
+    # --- 5. below the aggregate: slice-level retention + calibration -----------
+    # Per-class F1 slices — the aggregate dual gate can pass while one class
+    # collapses; slice_gate fails closed on exactly that.
+    stale_slices_fixed = registry.evaluate_slices(stale, xte, yte)
+    cand_slices_fixed = registry.evaluate_slices(candidate, xte, yte)
+    stale_slices_drift = registry.evaluate_slices(stale, dxte, yte)
+    cand_slices_drift = registry.evaluate_slices(candidate, dxte, yte)
+    sgate_fixed = slice_gate(cand_slices_fixed, stale_slices_fixed,
+                             settings.gate_regression_floor)
+    sgate_drift = slice_gate(cand_slices_drift, stale_slices_drift,
+                             settings.gate_regression_floor)
+    # Calibration: winning-class confidence vs correctness (top-label ECE).
+    ece = {}
+    for tag, model, texts in (("stale_fixed", stale, xte), ("cand_fixed", candidate, xte),
+                              ("stale_drift", stale, dxte), ("cand_drift", candidate, dxte)):
+        conf, corr = registry.prediction_confidence(model, texts, yte)
+        ece[tag] = round(expected_calibration_error(conf, corr), 4)
+    cgate_fixed = calibration_gate(ece["cand_fixed"], ece["stale_fixed"])
+    cgate_drift = calibration_gate(ece["cand_drift"], ece["stale_drift"])
+
     return {
         "scenario": f"vocab_concept_drift(p={p})",
         "detected": det["drift"],
@@ -167,6 +190,27 @@ def run(p: float = 0.7, window: int = 600, seed: int = 42,
         "safety": {"safe_to_promote": safe,
                    "retention_floor": safety_retention_floor,
                    "retention_ratio": round(ret_ratio, 4)},
+        "slices": {
+            "fixed_holdout": {
+                "stale": {k: round(v, 4) for k, v in stale_slices_fixed.items()},
+                "candidate": {k: round(v, 4) for k, v in cand_slices_fixed.items()},
+                "gate": {"passed": sgate_fixed.passed, "reason": sgate_fixed.reason,
+                         "worst_slice": sgate_fixed.worst_slice,
+                         "worst_delta": round(sgate_fixed.worst_delta, 4)},
+            },
+            "drifted_holdout": {
+                "stale": {k: round(v, 4) for k, v in stale_slices_drift.items()},
+                "candidate": {k: round(v, 4) for k, v in cand_slices_drift.items()},
+                "gate": {"passed": sgate_drift.passed, "reason": sgate_drift.reason,
+                         "worst_slice": sgate_drift.worst_slice,
+                         "worst_delta": round(sgate_drift.worst_delta, 4)},
+            },
+        },
+        "calibration": {
+            "ece": ece,
+            "gate_fixed": {"passed": cgate_fixed.passed, "reason": cgate_fixed.reason},
+            "gate_drifted": {"passed": cgate_drift.passed, "reason": cgate_drift.reason},
+        },
     }
 
 
@@ -198,7 +242,41 @@ def to_markdown(r: dict) -> str:
         f"{'SAFE' if r['safety']['safe_to_promote'] else 'UNSAFE'} to promote "
         f"(retention {r['safety']['retention_ratio']:.3f} vs floor "
         f"{r['safety']['retention_floor']:.2f})",
+        "",
+        _slices_markdown(r),
     ])
+
+
+def _slices_markdown(r: dict) -> str:
+    s, cal = r["slices"], r["calibration"]
+    fixed, drifted = s["fixed_holdout"], s["drifted_holdout"]
+    lines = [
+        "Per-class F1 slices (candidate vs stale, Δ on FIXED / DRIFTED holdout):",
+        "",
+        "| slice | stale fixed | cand fixed | Δ fixed | stale drift | cand drift | Δ drift |",
+        "|---|---|---|---|---|---|---|",
+    ]
+    for name in fixed["stale"]:
+        sf, cf = fixed["stale"][name], fixed["candidate"][name]
+        sd, cd = drifted["stale"][name], drifted["candidate"][name]
+        lines.append(f"| {name} | {sf:.4f} | {cf:.4f} | {cf - sf:+.4f} "
+                     f"| {sd:.4f} | {cd:.4f} | {cd - sd:+.4f} |")
+    lines += [
+        "",
+        f"Slice gate FIXED   : {'PASS' if fixed['gate']['passed'] else 'FAIL'}"
+        f" — {fixed['gate']['reason']}",
+        f"Slice gate DRIFTED : {'PASS' if drifted['gate']['passed'] else 'FAIL'}"
+        f" — {drifted['gate']['reason']}",
+        f"Calibration (ECE)  : stale_fixed {cal['ece']['stale_fixed']:.4f} | "
+        f"cand_fixed {cal['ece']['cand_fixed']:.4f} | "
+        f"stale_drift {cal['ece']['stale_drift']:.4f} | "
+        f"cand_drift {cal['ece']['cand_drift']:.4f}",
+        f"Calibration gate FIXED   : {'PASS' if cal['gate_fixed']['passed'] else 'FAIL'}"
+        f" — {cal['gate_fixed']['reason']}",
+        f"Calibration gate DRIFTED : {'PASS' if cal['gate_drifted']['passed'] else 'FAIL'}"
+        f" — {cal['gate_drifted']['reason']}",
+    ]
+    return "\n".join(lines)
 
 
 def sweep_p(ps: list[float], window: int = 600, seeds: int = 3,

@@ -74,6 +74,26 @@ def evaluate(pipeline: Pipeline, texts: list[str], labels: list[int]) -> dict[st
     }
 
 
+def evaluate_slices(pipeline: Pipeline, texts: list[str], labels: list[int],
+                    label_names: tuple[str, ...] = AG_NEWS_LABELS) -> dict[str, float]:
+    """Per-class F1 — the slice scores the governance layer's ``slice_gate`` consumes.
+    Slices here are classes; any other partition (segment, region, cohort) works the
+    same way as long as each slice yields one scalar."""
+    preds = pipeline.predict(texts)
+    per_class = f1_score(labels, preds, average=None,
+                         labels=list(range(len(label_names))))
+    return {name: float(score) for name, score in zip(label_names, per_class, strict=True)}
+
+
+def prediction_confidence(pipeline: Pipeline, texts: list[str],
+                          labels: list[int]) -> tuple[list[float], list[bool]]:
+    """Winning-class probabilities + correctness flags for calibration scoring
+    (``governance.expected_calibration_error``). Requires ``predict_proba``."""
+    proba = pipeline.predict_proba(texts)
+    preds = proba.argmax(axis=1)
+    return proba.max(axis=1).tolist(), [bool(p == y) for p, y in zip(preds, labels, strict=True)]
+
+
 @dataclass(frozen=True)
 class GateResult:
     passed: bool

@@ -180,6 +180,49 @@ def test_promotion_decision_quality_scoring():
     assert q1["unsafe_promotion_rate"] == 0.5
 
 
+def test_slice_gate_fails_closed_when_aggregate_win_masks_slice_collapse():
+    from driftguard.governance import slice_gate
+
+    incumbent = {"World": 0.90, "Sports": 0.95, "Business": 0.88, "Sci/Tech": 0.91}
+    # Macro average improves (+0.02 overall) but Business collapses by 0.12.
+    candidate = {"World": 0.95, "Sports": 0.98, "Business": 0.76, "Sci/Tech": 0.97}
+    result = slice_gate(candidate, incumbent, regression_floor=0.05)
+    assert result.passed is False
+    assert result.worst_slice == "Business"
+    assert abs(result.worst_delta - (-0.12)) < 1e-9
+    assert result.report["Business"]["retention"] < 0.9
+
+    # Within-floor wobble passes.
+    ok = slice_gate({k: v - 0.01 for k, v in incumbent.items()}, incumbent,
+                    regression_floor=0.05)
+    assert ok.passed is True
+
+    # A slice missing from the candidate fails closed.
+    partial = {k: v for k, v in candidate.items() if k != "World"}
+    assert slice_gate(partial, incumbent).passed is False
+    # No slices at all fails closed.
+    assert slice_gate({}, {}).passed is False
+
+
+def test_expected_calibration_error_and_gate():
+    from driftguard.governance import calibration_gate, expected_calibration_error
+
+    # Perfectly calibrated: 70% confidence, 70% correct in that bin.
+    conf = [0.7] * 10
+    corr = [True] * 7 + [False] * 3
+    assert abs(expected_calibration_error(conf, corr)) < 1e-9
+
+    # Overconfident: 90% confidence, 60% correct -> ECE = 0.3.
+    conf = [0.9] * 10
+    corr = [True] * 6 + [False] * 4
+    assert abs(expected_calibration_error(conf, corr) - 0.3) < 1e-9
+
+    # Empty input is defined (0.0), and the gate is fail-closed beyond tolerance.
+    assert expected_calibration_error([], []) == 0.0
+    assert calibration_gate(0.10, 0.05, tolerance=0.02).passed is False
+    assert calibration_gate(0.06, 0.05, tolerance=0.02).passed is True
+
+
 def test_streaming_abrupt_change_is_detected_quickly():
     _pool()
     from streaming import run

@@ -37,6 +37,32 @@ After a drift-triggered retrain, two ratios quantify the trade-off:
 Recovery without retention is catastrophic forgetting; retention without recovery is
 failure to adapt. The `dual` gate exists to require *both*.
 
+### Below the aggregate: slices and calibration
+
+Aggregate ratios can hide where the damage lands. Two further primitive families,
+still operating only on scalars, expose it:
+
+- **`slice_gate(candidate_slices, incumbent_slices, regression_floor)`** — fail-closed
+  no-worse-than-incumbent applied to **every named slice** (per-class F1 in the text
+  instance; per-segment AUC, per-cohort accuracy, a fairness partition — anything that
+  yields one scalar per slice). An aggregate win must never mask a slice collapse; a
+  missing slice fails closed. `slice_retention_report` gives the per-slice deltas and
+  retention ratios behind the decision.
+- **`expected_calibration_error(confidences, correct)`** + **`calibration_gate`** —
+  top-label ECE, and a fail-closed check that the candidate's ECE does not exceed the
+  incumbent's by more than a tolerance. Accuracy recovery bought with overconfidence is
+  a regression for every consumer of the model's probabilities (thresholds, triage,
+  review queues).
+
+Measured on the reference loop (`make recovery`, vocab drift p=0.7): the aggregate
+`dual` gate **passes** the retrained candidate — and the slice + calibration layer shows
+exactly what that pass accepts: forgetting concentrates in two classes (Sci/Tech
+−0.085, Business −0.081 on the fixed holdout, vs Sports −0.045), and the candidate's
+old-distribution ECE is ~4× the incumbent's (0.019 → 0.070) while being *better*
+calibrated than the stale model on the new distribution (0.020 vs 0.036). The
+aggregate gate answers "may it ship?"; the slice/calibration report is the risk
+statement of what shipping it means.
+
 ## 3. The measured trade-off
 
 The reference implementation exercises the framework under controlled concept drift

@@ -21,6 +21,14 @@ The contract:
   adapted:
     - ``recovery_ratio``  — fraction of the drift-induced loss regained on the new data.
     - ``retention_ratio`` — share of original-distribution performance kept.
+* **Slice-level safety** extends no-worse-than-incumbent below the aggregate:
+    - ``slice_gate``  — fail-closed if ANY slice regresses more than the floor; an
+                        aggregate win must never mask a slice collapse.
+    - ``slice_retention_report`` — per-slice deltas and retention ratios.
+* **Calibration safety** — a candidate that recovers accuracy but becomes overconfident
+  is unsafe for any downstream consumer of its probabilities:
+    - ``expected_calibration_error`` — top-label ECE from confidences + correctness.
+    - ``calibration_gate`` — candidate ECE may not exceed incumbent ECE + tolerance.
 
 See ``docs/GOVERNANCE.md`` for the full write-up and how the text reference implementation
 instantiates this contract.
@@ -28,7 +36,8 @@ instantiates this contract.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
 
 from driftguard.registry import (
     GateResult,
@@ -50,6 +59,12 @@ __all__ = [
     "retention_ratio",
     "safe_promotion_oracle",
     "promotion_decision_quality",
+    "SliceGateResult",
+    "slice_gate",
+    "slice_retention_report",
+    "CalibrationGateResult",
+    "expected_calibration_error",
+    "calibration_gate",
 ]
 
 
@@ -90,6 +105,107 @@ def safe_promotion_oracle(candidate_new_score: float, incumbent_new_score: float
     return (candidate_new_score >= incumbent_new_score
             and retention_ratio(candidate_original_score, incumbent_original_score)
             >= retention_floor)
+
+
+@dataclass(frozen=True)
+class SliceGateResult:
+    passed: bool
+    worst_slice: str | None
+    worst_delta: float
+    regression_floor: float
+    reason: str
+    report: dict[str, dict[str, float]] = field(default_factory=dict)
+
+
+def slice_retention_report(candidate_slices: Mapping[str, float],
+                           incumbent_slices: Mapping[str, float]) -> dict[str, dict[str, float]]:
+    """Per-slice comparison: candidate vs incumbent score, delta, and retention ratio.
+
+    Slices are any named partitions with a scalar score each — per-class F1 in the
+    text reference instance, but equally per-segment AUC, per-region accuracy, or a
+    fairness cohort metric. Model-agnostic like everything in this module.
+    """
+    return {
+        name: {
+            "candidate": float(candidate_slices.get(name, 0.0)),
+            "incumbent": float(inc),
+            "delta": float(candidate_slices.get(name, 0.0)) - float(inc),
+            "retention": retention_ratio(float(candidate_slices.get(name, 0.0)), float(inc)),
+        }
+        for name, inc in incumbent_slices.items()
+    }
+
+
+def slice_gate(candidate_slices: Mapping[str, float],
+               incumbent_slices: Mapping[str, float],
+               regression_floor: float = 0.05) -> SliceGateResult:
+    """Fail-closed slice-level no-worse-than-incumbent: EVERY incumbent slice must hold
+    ``candidate >= incumbent - regression_floor``. An aggregate improvement must never
+    mask a slice collapse. A slice missing from the candidate scores fails closed.
+    """
+    report = slice_retention_report(candidate_slices, incumbent_slices)
+    if not report:
+        return SliceGateResult(False, None, 0.0, regression_floor,
+                               "no incumbent slices supplied — fail closed", {})
+    worst_slice = min(report, key=lambda name: report[name]["delta"])
+    worst_delta = report[worst_slice]["delta"]
+    missing = [name for name in incumbent_slices if name not in candidate_slices]
+    passed = not missing and worst_delta >= -regression_floor
+    if missing:
+        reason = f"candidate missing slice scores for {missing} — fail closed"
+    else:
+        reason = (f"worst slice '{worst_slice}' delta {worst_delta:+.4f} "
+                  f"{'>=' if passed else '<'} -floor ({-regression_floor:.4f})")
+    return SliceGateResult(passed, worst_slice, float(worst_delta), regression_floor,
+                           reason, report)
+
+
+def expected_calibration_error(confidences: Sequence[float], correct: Sequence[bool],
+                               bins: int = 10) -> float:
+    """Top-label ECE: bin predictions by confidence; ECE = Σ (n_b/N)·|acc_b − conf_b|.
+
+    ``confidences`` are the winning-class probabilities, ``correct`` whether the
+    prediction matched the label. 0 = perfectly calibrated. Model-agnostic — any
+    classifier that emits a winning-class probability can be scored.
+    """
+    import numpy as np
+
+    conf = np.asarray(confidences, dtype=float)
+    corr = np.asarray(correct, dtype=bool)
+    if conf.size == 0:
+        return 0.0
+    edges = np.linspace(0.0, 1.0, bins + 1)
+    idx = np.clip(np.digitize(conf, edges[1:-1], right=False), 0, bins - 1)
+    ece = 0.0
+    for b in range(bins):
+        mask = idx == b
+        if not mask.any():
+            continue
+        ece += (mask.mean()) * abs(corr[mask].mean() - conf[mask].mean())
+    return float(ece)
+
+
+@dataclass(frozen=True)
+class CalibrationGateResult:
+    passed: bool
+    candidate_ece: float
+    incumbent_ece: float
+    tolerance: float
+    reason: str
+
+
+def calibration_gate(candidate_ece: float, incumbent_ece: float,
+                     tolerance: float = 0.02) -> CalibrationGateResult:
+    """Fail-closed calibration check: the candidate's ECE may exceed the incumbent's by
+    at most ``tolerance``. Accuracy recovery bought with overconfidence is a regression
+    for every consumer of the model's probabilities (thresholds, triage, review queues).
+    """
+    passed = candidate_ece <= incumbent_ece + tolerance
+    reason = (f"candidate ECE {candidate_ece:.4f} "
+              f"{'<=' if passed else '>'} incumbent {incumbent_ece:.4f} "
+              f"+ tolerance {tolerance:.4f}")
+    return CalibrationGateResult(passed, float(candidate_ece), float(incumbent_ece),
+                                 tolerance, reason)
 
 
 def promotion_decision_quality(

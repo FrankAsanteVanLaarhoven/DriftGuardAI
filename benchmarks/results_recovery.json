@@ -2,18 +2,19 @@
   "scenario": "vocab_concept_drift(p=0.7)",
   "detected": true,
   "detected_by": [
-    "domain_classifier"
+    "domain_classifier",
+    "descriptor_ks"
   ],
   "domain_auc": 1.0,
   "psi": 0.014208340177638378,
   "timing_s": {
-    "detection": 0.271,
-    "retrain": 24.268,
-    "evaluate": 0.762,
-    "detection_to_decision": 24.538
+    "detection": 0.262,
+    "retrain": 23.51,
+    "evaluate": 0.739,
+    "detection_to_decision": 23.772
   },
   "recovery": {
-    "time_to_recovery_s": 25.301,
+    "time_to_recovery_s": 24.511,
     "recovery_ratio": 0.9682,
     "retention_ratio": 0.9262,
     "orig_clean_macro_f1": 0.9197
@@ -42,5 +43,63 @@
     "safe_to_promote": true,
     "retention_floor": 0.9,
     "retention_ratio": 0.9262
+  },
+  "slices": {
+    "fixed_holdout": {
+      "stale": {
+        "World": 0.9205,
+        "Sports": 0.9693,
+        "Business": 0.8896,
+        "Sci/Tech": 0.8996
+      },
+      "candidate": {
+        "World": 0.8597,
+        "Sports": 0.9247,
+        "Business": 0.8084,
+        "Sci/Tech": 0.8147
+      },
+      "gate": {
+        "passed": false,
+        "reason": "worst slice 'Sci/Tech' delta -0.0849 < -floor (-0.0500)",
+        "worst_slice": "Sci/Tech",
+        "worst_delta": -0.0849
+      }
+    },
+    "drifted_holdout": {
+      "stale": {
+        "World": 0.8331,
+        "Sports": 0.8946,
+        "Business": 0.8016,
+        "Sci/Tech": 0.8084
+      },
+      "candidate": {
+        "World": 0.9209,
+        "Sports": 0.9684,
+        "Business": 0.8854,
+        "Sci/Tech": 0.8934
+      },
+      "gate": {
+        "passed": true,
+        "reason": "worst slice 'Sports' delta +0.0738 >= -floor (-0.0500)",
+        "worst_slice": "Sports",
+        "worst_delta": 0.0738
+      }
+    }
+  },
+  "calibration": {
+    "ece": {
+      "stale_fixed": 0.0187,
+      "cand_fixed": 0.0697,
+      "stale_drift": 0.0361,
+      "cand_drift": 0.0197
+    },
+    "gate_fixed": {
+      "passed": false,
+      "reason": "candidate ECE 0.0697 > incumbent 0.0187 + tolerance 0.0200"
+    },
+    "gate_drifted": {
+      "passed": true,
+      "reason": "candidate ECE 0.0197 <= incumbent 0.0361 + tolerance 0.0200"
+    }
   }
 }

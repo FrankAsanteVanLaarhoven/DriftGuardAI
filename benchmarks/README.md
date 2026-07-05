@@ -216,6 +216,35 @@ gate that still evaluates on the fixed holdout **rejects the recovered model**.
 `dual` promotes genuine recovery yet still fails closed on catastrophic forgetting.
 Safety intent preserved, recovery unblocked.
 
+### Below the aggregate: slices + calibration (same run)
+
+The same candidate the dual gate promotes, decomposed per class and by calibration
+(`governance.slice_gate`, `governance.expected_calibration_error`):
+
+| slice | stale fixed | cand fixed | Δ fixed | stale drift | cand drift | Δ drift |
+|---|---|---|---|---|---|---|
+| World | 0.9205 | 0.8597 | −0.0608 | 0.8331 | 0.9209 | +0.0878 |
+| Sports | 0.9693 | 0.9247 | −0.0446 | 0.8946 | 0.9684 | +0.0738 |
+| Business | 0.8896 | 0.8084 | −0.0812 | 0.8016 | 0.8854 | +0.0838 |
+| Sci/Tech | 0.8996 | 0.8147 | **−0.0849** | 0.8084 | 0.8934 | +0.0850 |
+
+- **Slice gate (floor 0.05): FIXED FAIL** (worst slice Sci/Tech −0.0849), DRIFTED PASS —
+  recovery lifts every class on the new distribution, but the forgetting is *not
+  uniform*: Sci/Tech and Business give up nearly twice what Sports does.
+- **Calibration (top-label ECE): FIXED FAIL** — candidate 0.0697 vs incumbent 0.0187
+  (tolerance 0.02): the candidate is ~4× less calibrated on old-distribution traffic.
+  On the drifted holdout it is *better* calibrated than the stale model
+  (0.0197 vs 0.0361) — it was trained there.
+
+**Reading it.** The aggregate dual gate passes this candidate at retention 0.926 — a
+defensible operating point. The slice/calibration layer states precisely what that
+pass accepts: class-concentrated forgetting past a per-slice 0.05 floor, and degraded
+probability quality on residual old-distribution traffic. Whether that risk is
+acceptable is a policy choice per deployment; what the framework guarantees is that
+the choice is now **explicit and measured**, not hidden inside a macro average. A
+deployment that wires `slice_gate`/`calibration_gate` into the promotion decision
+(rather than the risk report) simply fails this candidate closed.
+
 ## Recovery vs drift severity (`make recovery-sweep`)
 
 Sweeping the vocabulary-drift fraction `p` across **3 seeds** — each retraining on a

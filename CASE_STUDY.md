@@ -175,10 +175,18 @@ remains the operating-point reference for deployments running without the K-S la
 Full self-healing loop, measured end to end: detect → retrain candidate on drifted
 labelled data → baseline gate.
 
-- Detected by the domain classifier (AUC 1.0000) in **0.25 s**; PSI blind (0.0142).
-- Retrain **23.0 s** → **time-to-recovery 24.0 s** (detect + retrain + evaluate).
+- Detected by the domain classifier (AUC 1.0000) and the descriptor-KS layer in
+  **0.26 s**; PSI blind (0.0142).
+- Retrain **23.5 s** → **time-to-recovery 24.5 s** (detect + retrain + evaluate).
 - **Recovery ratio 0.968** (regains 96.8% of the drift-induced loss on the new
   distribution); **retention ratio 0.926** (keeps 92.6% of the old-distribution score).
+- **Below the aggregate** (slice + calibration layer, same run): forgetting is
+  class-concentrated — Sci/Tech −0.085 and Business −0.081 on the fixed holdout vs
+  Sports −0.045, failing the per-slice 0.05 floor (`slice_gate`) even though the
+  aggregate dual gate passes; and the candidate's old-distribution ECE is ~4× the
+  incumbent's (0.019 → 0.070, `calibration_gate` FAIL) while *better* calibrated on
+  the new distribution (0.020 vs 0.036). The aggregate gate answers "may it ship?";
+  the slice/calibration report states what shipping it accepts.
 
 | macro-F1            | stale primary | retrained candidate |
 |---------------------|---------------|---------------------|
