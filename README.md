@@ -132,7 +132,8 @@ companion to the production service in this repo.
 - `AGENTS.md` — repository conventions and guardrails.
 - `deploy/terraform/README.md` — exact AWS `apply` + `kubeconfig` steps.
 - `docs/DISTILBERT.md` — GPU runbook for the DistilBERT primary (linear model as fallback).
-- `benchmarks/README.md` — drift-injection benchmark, severity sweep, and closed-loop recovery.
+- `benchmarks/README.md` — drift-injection benchmark, severity sweep, closed-loop recovery,
+  promotion decision quality, and the head-to-head vs Evidently / NannyML.
 
 ```
 src/driftguard/{config,data,train,gate,governance,drift,textdrift,registry,detectors/,api/}  tests/  pipelines/

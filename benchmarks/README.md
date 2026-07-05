@@ -8,6 +8,7 @@ detector (PSI + domain-classifier) on each.
 make benchmark            # 5 seeds, window 600 (per-kind table + per-detector scorecard)
 make benchmark-sweep      # gradual_topic severity -> detection boundary
 make benchmark-stream     # streaming detection latency across temporal patterns
+make benchmark-h2h        # head-to-head vs Evidently / NannyML / scipy-KS baseline
 uv run python benchmarks/eval_harness.py --seeds 10 --window 800
 ```
 
@@ -57,6 +58,65 @@ The multi-layer detector more than **doubles recall over PSI alone (0.29 → 0.7
 false-positive cost**. Both single detectors are perfectly precise (no false alarms);
 the composite `any`-rule simply unions their coverage. This is the headline number for
 "the domain classifier catches what PSI misses", now quantified.
+
+## Head-to-head: DriftGuard vs Evidently vs NannyML (`make benchmark-h2h`)
+
+`head_to_head.py` runs the same eight generators, seeds, and windows against
+**Evidently 0.7** and **NannyML 0.13**, plus a plain **scipy K-S baseline**. Protocol
+(full fairness notes in the module docstring):
+
+- **Shared reference**: 1500 texts held out from the test pool with a fixed seed, never
+  used for windows; DriftGuard's PSI reference is rebuilt from the same sample.
+- **Shared features**: the tabular tools get an identical 5-column text-descriptor frame
+  (token_count, char_count, mean_word_len, oov_rate, non_alpha_rate); DriftGuard runs on
+  raw text (its design).
+- **Native decision rules, no tuning**: Evidently = its dataset rule (drifted-column
+  share ≥ 0.5); NannyML = any column alert in any analysis chunk (Jensen-Shannon,
+  std-band thresholds); `ks_baseline` = any column under Bonferroni-corrected two-sample
+  K-S at α=0.05; DriftGuard = composite any-rule.
+- `ks_baseline` stands in for **Alibi Detect**'s `KSDrift` (the same test + correction):
+  alibi-detect 0.13.0 pins numba/llvmlite versions with no Python 3.13 support, so the
+  package itself cannot be installed in this environment.
+
+Measured run (5 seeds, window 600):
+
+| drift kind | is_drift | driftguard | evidently | nannyml | ks_baseline |
+|---|---|---|---|---|---|
+| no_drift | False | 0.00 | 0.00 | **1.00** | 0.00 |
+| length_truncate | True | 1.00 | 1.00 | 1.00 | 1.00 |
+| class_prior_shift | True | 1.00 | 1.00 | 1.00 | 1.00 |
+| adjective_swap | True | 1.00 | 1.00 | 1.00 | 1.00 |
+| semantic_replace | True | 1.00 | 1.00 | 1.00 | 1.00 |
+| gradual_topic | True | 0.00 | 1.00 | 1.00 | 1.00 |
+| char_noise | True | 0.40 | 0.00 | 1.00 | 1.00 |
+| token_dropout | True | 1.00 | 1.00 | 1.00 | 1.00 |
+
+| tool | precision | recall | F1 | FPR | s/window |
+|---|---|---|---|---|---|
+| driftguard | 1.00 | 0.77 | 0.87 | 0.00 | 0.208 |
+| evidently | 1.00 | 0.86 | 0.92 | 0.00 | 0.163 |
+| nannyml | 0.88 | 1.00 | 0.93 | **1.00** | 0.005 |
+| **ks_baseline** | **1.00** | **1.00** | **1.00** | **0.00** | 0.008 |
+
+**Reading it — honestly.** The plain Bonferroni-corrected K-S over five good descriptors
+**wins this suite outright**: every one of these generators moves at least one surface
+descriptor, and a corrected classical test at n=600 vs a 1500-row reference is extremely
+sensitive to that. Evidently's native share-≥-0.5 rule trades recall for zero false
+alarms (it misses `char_noise`, where only one descriptor column moves). NannyML reaches
+perfect recall but **alarms on every clean window** — its std-band thresholds are
+calibrated from only ten 150-row reference chunks, a regime far below what its docs
+target; its real strength (per D3Bench) is linking drift to performance impact over long
+analysis periods, not small-window alarming. DriftGuard's composite keeps zero false
+positives and needs **no descriptor engineering**, but on descriptor-visible drift its
+recall (0.77) trails the classical baseline.
+
+Two conclusions, both actionable: **(1)** window-level detection on descriptor-visible
+drift is close to commoditized — a well-corrected classical test is the strongest
+detector here, so the composite should absorb one (a descriptor-KS layer is the measured
+next step, closing the `gradual_topic`/`char_noise` gap). **(2)** None of these tools
+answers the question DriftGuard exists for: *should the retrained candidate ship?* The
+comparison table above ends where the governance layer — recovery/retention, the dual
+gate, and the promotion decision-quality scorecard below — begins.
 
 ## Detection boundary: `gradual_topic` severity sweep
 

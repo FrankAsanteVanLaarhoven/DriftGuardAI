@@ -15,7 +15,7 @@ SERVICE_URL ?= http://localhost:$(PORT)
 DOCKER := $(shell [ -x /usr/bin/docker ] && echo /usr/bin/docker || command -v docker)
 
 .PHONY: help install lock lint fmt test data train train-transformer run run-transformer \
-	drift benchmark benchmark-sweep benchmark-stream recovery recovery-sweep \
+	drift benchmark benchmark-sweep benchmark-stream benchmark-h2h recovery recovery-sweep \
 	example-tabular example-embedding docker stack stack-down demo clean
 
 help: ## Show this help
@@ -70,6 +70,9 @@ benchmark-sweep: ## Severity sweep (detection boundary) for gradual_topic drift
 
 benchmark-stream: ## Streaming drift benchmark: detection latency across temporal patterns
 	uv run python benchmarks/streaming.py
+
+benchmark-h2h: ## Head-to-head: DriftGuard vs Evidently vs NannyML (+ scipy KS baseline)
+	uv run --extra bench python benchmarks/head_to_head.py
 
 recovery: ## Closed-loop: detect -> retrain -> gate under concept drift (timed, measured)
 	uv run python benchmarks/closed_loop.py

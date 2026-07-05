@@ -32,6 +32,10 @@ mlops = ["evidently>=0.4", "zenml>=0.60"]
 transformer = ["transformers>=4.42", "torch>=2.3"]
 embed = ["sentence-transformers>=3.0"]
 dev = ["pytest>=8.2", "ruff>=0.5", "pre-commit>=3.7"]
+bench = [
+    "evidently>=0.7.21",
+    "nannyml>=0.13.1",
+]
 
 [project.scripts]
 driftguard-train = "driftguard.train:main"
@@ -42,6 +46,14 @@ driftguard-gate = "driftguard.gate:main"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.uv]
+# The bench comparators (nannyml -> kaleido) ship platform-limited wheels; constrain
+# resolution to the platforms we actually run so uv picks installable versions.
+required-environments = [
+    "sys_platform == 'linux' and platform_machine == 'x86_64'",
+    "sys_platform == 'darwin' and platform_machine == 'arm64'",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/driftguard"]

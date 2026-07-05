@@ -107,6 +107,36 @@ def test_recovery_and_retention_ratio_formulas():
     assert abs(retention_ratio(0.8519, 0.9197) - 0.9263) < 1e-3
 
 
+def test_head_to_head_descriptors_are_reference_safe():
+    from head_to_head import DESCRIPTOR_COLUMNS, build_descriptors, reference_vocab
+
+    vocab = reference_vocab(["the market rallied today", "central bank rates"])
+    df = build_descriptors(["the market rallied", "unknownword bank"], vocab)
+    assert list(df.columns) == list(DESCRIPTOR_COLUMNS)
+    assert len(df) == 2
+    # First text: every token in vocab -> oov 0; second: one of two tokens unseen.
+    assert df["oov_rate"].iloc[0] == 0.0
+    assert abs(df["oov_rate"].iloc[1] - 0.5) < 1e-9
+    assert (df["token_count"] == [3, 2]).all()
+
+
+def test_head_to_head_smoke_all_tools_score():
+    pytest.importorskip("evidently")
+    pytest.importorskip("nannyml")
+    _pool()  # ensure data / skip otherwise
+    from head_to_head import TOOLS, run
+
+    summary = run(seeds=1, window=150, chunk_size=150, ref_size=600)
+    assert set(summary["scorecard"]) == set(TOOLS)
+    for tool in TOOLS:
+        card = summary["scorecard"][tool]
+        assert 0.0 <= card["f1"] <= 1.0
+        assert summary["mean_latency_s"][tool] > 0.0
+    # DriftGuard's composite must keep its zero-false-alarm property on no_drift.
+    no_drift_row = next(r for r in summary["rows"] if r["kind"] == "no_drift")
+    assert no_drift_row["driftguard"] == 0.0
+
+
 def test_safe_promotion_oracle_labels():
     from driftguard.governance import safe_promotion_oracle
 
