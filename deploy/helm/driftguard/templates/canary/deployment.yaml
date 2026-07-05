@@ -1,0 +1,56 @@
+{{- if .Values.canary.enabled }}
+# Canary: same Service, second Deployment. Traffic share = replica ratio.
+# Serves the gate-passed candidate (staging alias) — the fallback contract still
+# holds inside the pod: a broken candidate degrades to baseline, never 5xx.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "driftguard.fullname" . }}-canary
+  labels:
+    {{- include "driftguard.labels" . | nindent 4 }}
+    track: canary
+spec:
+  replicas: {{ .Values.canary.replicas }}
+  selector:
+    matchLabels:
+      {{- include "driftguard.selectorLabels" . | nindent 6 }}
+      track: canary
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        {{- include "driftguard.selectorLabels" . | nindent 8 }}
+        track: canary
+    spec:
+      serviceAccountName: {{ include "driftguard.fullname" . }}
+      securityContext:
+        {{- include "driftguard.podSecurityContext" . | nindent 8 }}
+      containers:
+        - name: app
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8000
+          env:
+            {{- $merged := merge (deepCopy .Values.canary.env) .Values.env }}
+            {{- range $name, $value := $merged }}
+            - name: {{ $name }}
+              value: {{ $value | quote }}
+            {{- end }}
+          {{- include "driftguard.probes" . | nindent 10 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            {{- include "driftguard.containerSecurityContext" . | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+{{- end }}

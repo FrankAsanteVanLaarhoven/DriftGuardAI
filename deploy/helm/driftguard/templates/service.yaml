@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "driftguard.fullname" . }}
+  labels:
+    {{- include "driftguard.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  # Selects stable AND canary pods (no `track` key): traffic splits by replica ratio.
+  selector:
+    {{- include "driftguard.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.service.port }}
+      targetPort: http

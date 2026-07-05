@@ -1,0 +1,72 @@
+# Defaults mirror deploy/k8s exactly; the raw manifests remain the kustomize path.
+# Install:  helm install driftguard deploy/helm/driftguard -n driftguard --create-namespace
+
+image:
+  repository: driftguard
+  tag: local            # CI overrides with the registry image by commit SHA
+  pullPolicy: IfNotPresent
+
+replicaCount: 2
+
+# Extra/override environment for the stable deployment. The defaults point the
+# primary at the production registry alias; the committed baseline needs nothing.
+env:
+  DRIFTGUARD_PRIMARY_MODEL_URI: "models:/driftguard@production"
+  DRIFTGUARD_MLFLOW_TRACKING_URI: "http://mlflow.driftguard.svc.cluster.local:5000"
+
+resources:
+  requests:
+    cpu: "250m"
+    memory: "512Mi"
+  limits:
+    cpu: "1"
+    memory: "1Gi"
+
+serviceAccount:
+  create: true
+  # IRSA role ARN from `terraform output app_irsa_role_arn`, e.g.
+  # eks.amazonaws.com/role-arn: arn:aws:iam::<account>:role/driftguard-app
+  annotations: {}
+
+service:
+  type: ClusterIP
+  port: 8000
+
+hpa:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 8
+  targetCPUUtilizationPercentage: 70
+
+monitoring:
+  # Both require the Prometheus Operator CRDs (kube-prometheus-stack).
+  serviceMonitor:
+    enabled: true
+    interval: 15s
+    # Must match the Prometheus Operator's serviceMonitorSelector.
+    releaseLabel: kube-prometheus-stack
+  prometheusRule:
+    enabled: true
+    releaseLabel: kube-prometheus-stack
+
+# --- Canary: a second Deployment behind the SAME Service ---------------------
+# Traffic split = canary replicas / (stable + canary replicas); no mesh needed.
+# The canary serves the gate-passed candidate from the registry staging alias.
+# For weighted routing finer than replica ratio, or step-based analysis, use
+# Argo Rollouts instead — this chart's canary is the dependency-free default.
+canary:
+  enabled: false
+  replicas: 1
+  env:
+    DRIFTGUARD_PRIMARY_MODEL_URI: "models:/driftguard@staging"
+  # Automated rollback: a per-minute guard queries Prometheus and scales the
+  # canary to 0 the moment the breach expression returns any series.
+  autoRollback:
+    enabled: true
+    prometheusUrl: "http://kube-prometheus-stack-prometheus.monitoring.svc:9090"
+    # Breach = canary 5xx ratio above threshold over the window, OR any canary
+    # pod serving from the fallback baseline tier (its candidate failed to load).
+    errorRateThreshold: "0.05"
+    window: "2m"
+    # Image for the guard CronJob; needs kubectl + curl + jq. Pin a digest in prod.
+    guardImage: "alpine/k8s:1.30.13"

@@ -1,0 +1,41 @@
+{{- if and .Values.canary.enabled .Values.monitoring.prometheusRule.enabled }}
+# Canary-scoped alerts: visibility for the same conditions the rollback guard
+# enforces. Requires the Prometheus Operator CRDs.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "driftguard.fullname" . }}-canary
+  labels:
+    {{- include "driftguard.labels" . | nindent 4 }}
+    release: {{ .Values.monitoring.prometheusRule.releaseLabel }}
+spec:
+  groups:
+    - name: driftguard.canary.rules
+      rules:
+        - alert: DriftGuardCanaryHighErrorRate
+          expr: >-
+            (
+              sum(rate(http_request_duration_seconds_count{status=~"5.*",
+                pod=~"{{ include "driftguard.fullname" . }}-canary-.*"}[{{ .Values.canary.autoRollback.window }}]))
+              /
+              sum(rate(http_request_duration_seconds_count{
+                pod=~"{{ include "driftguard.fullname" . }}-canary-.*"}[{{ .Values.canary.autoRollback.window }}]))
+            ) > {{ .Values.canary.autoRollback.errorRateThreshold }}
+          for: 1m
+          labels:
+            severity: page
+          annotations:
+            summary: "DriftGuard canary 5xx ratio above threshold"
+            description: "The canary track is failing; the rollback guard will scale it to 0."
+
+        - alert: DriftGuardCanaryDegraded
+          expr: >-
+            max(driftguard_model_tier{tier="baseline",
+              pod=~"{{ include "driftguard.fullname" . }}-canary-.*"}) == 1
+          for: 1m
+          labels:
+            severity: page
+          annotations:
+            summary: "DriftGuard canary serving from fallback baseline"
+            description: "The canary's candidate model failed to load — it adds no value and skews the canary signal."
+{{- end }}

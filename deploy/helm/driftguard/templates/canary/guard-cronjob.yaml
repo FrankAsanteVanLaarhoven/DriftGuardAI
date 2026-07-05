@@ -1,0 +1,74 @@
+{{- if and .Values.canary.enabled .Values.canary.autoRollback.enabled }}
+# Automated canary rollback, no mesh / no Argo required: every minute, query
+# Prometheus for the breach expression; if ANY series comes back, scale the
+# canary to 0 and annotate it with the reason. Worst-case rollback latency =
+# guard period (60s) + `for` window already elapsed in the expression + scale
+# time — well inside the 5-minute budget.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "driftguard.fullname" . }}-canary-guard
+  labels:
+    {{- include "driftguard.labels" . | nindent 4 }}
+spec:
+  schedule: "* * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 55
+      template:
+        metadata:
+          labels:
+            {{- include "driftguard.selectorLabels" . | nindent 12 }}
+            track: canary-guard
+        spec:
+          serviceAccountName: {{ include "driftguard.fullname" . }}-canary-guard
+          restartPolicy: Never
+          securityContext:
+            {{- include "driftguard.podSecurityContext" . | nindent 12 }}
+          containers:
+            - name: guard
+              image: {{ .Values.canary.autoRollback.guardImage | quote }}
+              securityContext:
+                {{- include "driftguard.containerSecurityContext" . | nindent 16 }}
+              env:
+                - name: PROM_URL
+                  value: {{ .Values.canary.autoRollback.prometheusUrl | quote }}
+                - name: CANARY
+                  value: {{ include "driftguard.fullname" . }}-canary
+                - name: NS
+                  value: {{ .Release.Namespace }}
+                - name: BREACH_QUERY
+                  value: >-
+                    (
+                      sum(rate(http_request_duration_seconds_count{status=~"5.*",
+                        pod=~"{{ include "driftguard.fullname" . }}-canary-.*"}[{{ .Values.canary.autoRollback.window }}]))
+                      /
+                      sum(rate(http_request_duration_seconds_count{
+                        pod=~"{{ include "driftguard.fullname" . }}-canary-.*"}[{{ .Values.canary.autoRollback.window }}]))
+                    ) > {{ .Values.canary.autoRollback.errorRateThreshold }}
+                    or
+                    max(driftguard_model_tier{tier="baseline",
+                      pod=~"{{ include "driftguard.fullname" . }}-canary-.*"}) == 1
+              command: ["/bin/sh", "-ec"]
+              args:
+                - |
+                  replicas=$(kubectl -n "$NS" get deployment "$CANARY" -o jsonpath='{.spec.replicas}')
+                  if [ "$replicas" = "0" ]; then
+                    echo "canary already at 0 replicas; nothing to guard"
+                    exit 0
+                  fi
+                  series=$(curl -sf "$PROM_URL/api/v1/query" \
+                    --data-urlencode "query=$BREACH_QUERY" | jq '.data.result | length')
+                  echo "breach series count: $series"
+                  if [ "$series" -gt 0 ]; then
+                    echo "BREACH: rolling canary back to 0 replicas"
+                    kubectl -n "$NS" scale deployment "$CANARY" --replicas=0
+                    kubectl -n "$NS" annotate deployment "$CANARY" --overwrite \
+                      driftguard.io/rolled-back-at="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+                      driftguard.io/rollback-reason="prometheus breach: canary 5xx ratio > {{ .Values.canary.autoRollback.errorRateThreshold }} or canary on baseline tier"
+                  fi
+{{- end }}

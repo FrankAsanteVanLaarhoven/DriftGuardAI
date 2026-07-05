@@ -1,0 +1,41 @@
+{{- if .Values.monitoring.prometheusRule.enabled }}
+# Requires the Prometheus Operator CRDs (kube-prometheus-stack).
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "driftguard.fullname" . }}
+  labels:
+    {{- include "driftguard.labels" . | nindent 4 }}
+    release: {{ .Values.monitoring.prometheusRule.releaseLabel }}
+spec:
+  groups:
+    - name: driftguard.rules
+      rules:
+        # The core resilience alert: serving degraded (baseline) for >5 minutes.
+        - alert: DriftGuardServingDegraded
+          expr: driftguard_model_tier{tier="baseline"} == 1
+          for: 5m
+          labels:
+            severity: page
+          annotations:
+            summary: "DriftGuard running degraded (baseline tier) for >5m"
+            description: "Primary model unavailable on {{ `{{ $labels.pod }}` }}; serving fallback baseline."
+
+        - alert: DriftGuardHighFallbackRate
+          expr: rate(driftguard_fallback_total[5m]) > 0.2
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Elevated request-time fallback rate"
+            description: "More than 20% of requests are falling back to the baseline."
+
+        - alert: DriftGuardHighErrorRate
+          expr: sum(rate(http_request_duration_seconds_count{status=~"5.*"}[5m])) > 0.5
+          for: 5m
+          labels:
+            severity: page
+          annotations:
+            summary: "DriftGuard elevated 5xx rate"
+            description: "The service is returning server errors."
+{{- end }}

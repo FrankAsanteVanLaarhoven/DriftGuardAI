@@ -131,13 +131,15 @@ companion to the production service in this repo.
 - `docs/DEMO_SLIDES.md` — a **7-slide outline** mirroring the runbook (content · show · say).
 - `AGENTS.md` — repository conventions and guardrails.
 - `deploy/terraform/README.md` — exact AWS `apply` + `kubeconfig` steps.
+- `deploy/helm/README.md` — Helm install, the replica-ratio canary, and automated
+  Prometheus-driven rollback (no mesh / no Argo required).
 - `docs/DISTILBERT.md` — GPU runbook for the DistilBERT primary (linear model as fallback).
 - `benchmarks/README.md` — drift-injection benchmark, severity sweep, closed-loop recovery,
   promotion decision quality, and the head-to-head vs Evidently / NannyML.
 
 ```
 src/driftguard/{config,data,train,gate,governance,drift,textdrift,registry,detectors/,api/}  tests/  pipelines/
-deploy/{k8s,terraform,ansible,monitoring}  Dockerfile  docker-compose.yml  Jenkinsfile
+deploy/{k8s,helm,terraform,ansible,monitoring}  Dockerfile  docker-compose.yml  Jenkinsfile
 models/baseline.joblib  artifacts/{metrics,baseline_metrics,reference}.json
 ```
 

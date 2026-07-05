@@ -1,0 +1,17 @@
+apiVersion: v2
+name: driftguard
+description: >-
+  Governed model adaptation under distribution shift: the DriftGuard reference
+  service with fallback contract, monitoring, and a dependency-free canary with
+  automated Prometheus-driven rollback.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - mlops
+  - drift-detection
+  - model-governance
+  - canary
+maintainers:
+  - name: Frank Asante Van Laarhoven
+    email: frankleroyvan@gmail.com
