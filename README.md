@@ -138,6 +138,10 @@ companion to the production service in this repo.
 - `deploy/helm/README.md` — Helm install, the replica-ratio canary, and automated
   Prometheus-driven rollback (no mesh / no Argo required).
 - `docs/DISTILBERT.md` — GPU runbook for the DistilBERT primary (linear model as fallback).
+- `docs/DRIFTGUARDBENCH.md` — **DriftGuardBench v0.1**: the assembled eight-metric report
+  measuring *safe promotion* (detection F1 + localization delay + recovery/retention +
+  promotion precision + unsafe-promotion rate + fallback survival + rollback correctness),
+  every number measured and reproducible.
 - `benchmarks/README.md` — drift-injection benchmark, severity sweep, closed-loop recovery,
   promotion decision quality, and the head-to-head vs Evidently / NannyML.
 
