@@ -79,7 +79,9 @@ CronJob every minute), with the canary's candidate made unloadable — see
 - In-cluster traffic probe (1 req/s): **1248/1248 HTTP 200** from the moment the fixed
   image rolled, with zero non-200 through the broken-canary deploy and rollback.
 
-**Test suite: 16 passed** — unit + integration + **5 fallback/chaos tests**.
+**Test suite: 70 passed** — unit + integration + **6 fallback/chaos tests** (including the
+hanging-registry case), detector-protocol tests, benchmark smoke tests, Helm chart contract
+tests, and wire-contract tests (round-trip, tamper evidence, version policy).
 
 ## Drift detection (PSI over token_count, threshold 0.2)
 

@@ -39,10 +39,11 @@ decision* that weighs recovery against forgetting."
 
 **Detect → retrain → gate (decoupled)**
 
-- **Multi-layer detection:** PSI (length) + a domain classifier (semantics)
+- **Multi-layer detection:** PSI (length) + domain classifier (semantics) + descriptor-KS (classical, corrected)
 - **Incumbent-aware gate:** beat `max(baseline, live primary)`, not just a weak floor
 - **Dual gate:** promote genuine recovery, **fail closed on forgetting**
-- Metrics on **scalar scores** ⇒ model-agnostic
+- Below the aggregate: **slice gates + calibration (ECE)** state what a PASS accepts
+- Metrics on **scalar scores** ⇒ model-agnostic; decisions export as a **sealed, versioned record**
 
 **Show:** this slide (optionally the one-line architecture from `ARCHITECTURE.md`).
 **Say:** "Detection triggers a retrain; a score-based gate decides promotion. Keeping them
@@ -76,7 +77,9 @@ separate is what makes the governance reusable."
 **Show:** the `python3` recovery/retention table from the runbook.
 **Say:** "Embeddings make it sharpest — recovery is perfect at every severity, yet retention
 collapses to 0.61. Promoting that would wreck production, so the gate refuses it. *Recovery alone
-is not safety.*"
+is not safety.* And when the gate *does* pass a candidate, the slice + calibration report states
+what that pass accepts — at p=0.7, class-concentrated forgetting and 4× worse old-distribution
+calibration, sealed into a tamper-evident decision record."
 
 ---
 
@@ -100,16 +103,22 @@ classifier, imported verbatim."
 
 - Live Prometheus metrics: serving tier, fallback events, latency breaches, baseline share
 - Grafana **Adaptation Governance** dashboard (live signals + measured recovery/retention)
+- Helm chart: dependency-free **canary + automated rollback — measured 50 s** (breach → rollback),
+  probe **1248/1248 HTTP 200** through a broken deploy
 - Everything **reproducible & file-backed**; benchmark harness ready to share
 
 **Show:** the Grafana dashboard (`:3001` → *Adaptation Governance*).
-**Say:** "Reusable governance, a measurable safety property, three instances, all reproducible.
-Happy to explore how these patterns fit your stack — or share the benchmark harness."
+**Say:** "Reusable governance, a measurable safety property, three instances, measured rollback
+evidence, all reproducible. Happy to explore how these patterns fit your stack — or share the
+benchmark harness."
 
 ---
 
 ### Delivery notes
 - **6–8 minutes.** Slides 4–5 are the core; don't rush them.
 - If time is tight, drop Slide 6's live run (the Slide-5 table already shows two modalities).
-- Differentiator to keep ready: *"vs Evidently/Arize — they monitor; we make the **promotion
-  decision** with an incumbent- and forgetting-aware gate."*
+- Differentiator to keep ready, now **measured**: *"vs Evidently/NannyML — we ran the same-protocol
+  head-to-head: composite **1.00 F1 / 0.00 FPR** vs Evidently 0.92 and NannyML at 100% false alarms
+  on clean windows. The first run had a plain K-S beating us — we published that, then absorbed the
+  method. And the decision-quality table (promotion precision 1.00 / unsafe rate 0.00) measures
+  what monitoring tools don't define: whether the **promotion decision** was safe."*

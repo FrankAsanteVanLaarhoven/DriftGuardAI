@@ -209,26 +209,34 @@ identical, not re-implementations).
 
 ### 5.1 Drift-injection benchmark (5 seeds, window 600)
 
-Mean detection on genuine drift **0.71**, false-positive rate on `no_drift` **0.00**.
+Mean detection on genuine drift **1.00**, false-positive rate on `no_drift` **0.00**.
 
 | detector | precision | recall | F1 | FPR |
 |----------|-----------|--------|----|-----|
 | PSI | 1.00 | 0.29 | 0.44 | 0.00 |
 | domain_classifier | 1.00 | 0.57 | 0.73 | 0.00 |
-| **composite** | 1.00 | **0.71** | **0.83** | 0.00 |
+| descriptor_ks | 1.00 | 1.00 | 1.00 | 0.00 |
+| **composite** | 1.00 | **1.00** | **1.00** | 0.00 |
 
-The multi-layer detector **more than doubles recall over PSI alone (0.29 → 0.71) at zero
-false-positive cost**: PSI fires only on length shifts; every semantic category is carried by
-the domain classifier. This is "the domain classifier catches what PSI misses", quantified.
-(An independent notebook run reproduces the mechanism starkly — on `semantic_replace`, PSI =
-0.006 (blind) while domain-AUC = 1.000.)
+The layered story, in the order it was measured: PSI fires only on length shifts; the domain
+classifier carries every strong semantic category ("the domain classifier catches what PSI
+misses" — an independent notebook run reproduces the mechanism starkly: on `semantic_replace`,
+PSI = 0.006, blind, while domain-AUC = 1.000). The two-layer composite measured **0.71 recall /
+0.83 F1**, and a head-to-head against Evidently, NannyML, and a Bonferroni-corrected scipy K-S
+baseline (`benchmarks/head_to_head.py`) then showed the *classical* test winning the suite
+outright (1.00 F1) — every generator moves at least one surface descriptor. That finding was
+absorbed rather than argued with: a third **descriptor-KS layer** (five text descriptors,
+family-wise α=0.05) closed the `gradual_topic`/`char_noise` gap, bringing the composite to
+1.00/1.00 at zero FPR. The suite's stated open gap: it lacks a descriptor-*preserving* semantic
+generator, so the domain classifier's unique-coverage claim there is design, not yet measurement.
 
 ### 5.2 Detection boundary (severity sweep)
 
-Domain-classifier AUC rises monotonically with injected drift fraction and crosses the 0.75 gate
-at ~50 % injection for gradual topic drift; PSI stays flat — structurally blind to length-
-preserving shift. Lowering the gate moves the boundary left at a false-positive cost — a
-now-quantified operating-point choice.
+With the descriptor-KS layer the composite detects gradual topic drift at every injection
+fraction down to **10 %** (`oov_rate` moves decisively at any severity). The domain-classifier-
+only boundary remains visible in the AUC column: it rises monotonically and crosses the 0.75
+gate at ~50 % injection; PSI stays flat — structurally blind to length-preserving shift. That
+AUC curve is the operating-point reference for deployments running without the K-S layer.
 
 ### 5.3 Streaming detection latency (Gama et al. 2014 taxonomy)
 
@@ -325,8 +333,10 @@ Migrating the text service onto the shared detectors risked changing the committ
 numbers. Exact parity required (i) routing PSI through `PSIDetector.from_reference` reading the
 *frozen* training reference (reproducing `drift.compute_psi` to <1e-9, guarded by a regression
 test) and (ii) aligning the domain classifier's balancing to **subsample only the larger side**
-with `splits=5`. *Outcome:* the drift benchmark is **byte-identical** after migration (scorecard
-0.29 / 0.57 / 0.71 unchanged), so consolidation was behaviour-preserving.
+with `splits=5`. *Outcome:* the drift benchmark is **byte-identical** after migration (the
+then-two-layer scorecard 0.29 / 0.57 / 0.71 unchanged), so consolidation was
+behaviour-preserving. (The composite later gained the descriptor-KS layer — §5.1 — which
+deliberately *did* change the scorecard, to 1.00.)
 
 ### 6.6 A staging omission briefly broke `main`
 
@@ -372,8 +382,10 @@ live serving-tier / fallback / latency-breach metrics alongside the measured rec
 ## 7 · Outcomes and results
 
 - **Text:** linear primary macro-F1 0.9197, DistilBERT 0.9412; shifted-sample PSI 12.52 vs
-  stable 0.014; multi-layer composite recall 0.71 at 0.00 FPR; closed-loop recovery 0.968 /
-  retention 0.926 with the dual gate correctly promoting genuine recovery.
+  stable 0.014; three-layer composite recall 1.00 at 0.00 FPR (0.71 before the descriptor-KS
+  layer the head-to-head motivated); closed-loop recovery 0.968 / retention 0.926 with the dual
+  gate correctly promoting genuine recovery — and the slice/calibration layer stating what that
+  pass accepts (class-concentrated forgetting, 4× old-distribution ECE).
 - **Tabular:** baseline 0.783 / primary 0.819; as covariate drift deepens, retention falls
   (0.936 → 0.728) and the dual gate flips PASS → FAIL.
 - **Embeddings:** baseline 0.838 / primary 0.907; recovery ≈ 1.0 at all severities while

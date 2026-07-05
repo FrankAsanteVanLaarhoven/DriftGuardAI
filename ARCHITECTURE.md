@@ -68,7 +68,7 @@ service degrades to the fast classic model instead of going down.
 | Experiment/registry| MLflow (sqlite locally, server in-stack) |
 | Orchestration      | ZenML pipelines (optional extra)         |
 | Serving            | FastAPI + uvicorn                        |
-| Drift              | PSI + domain-classifier (text-aware) + Evidently/embedding options |
+| Drift              | PSI + domain-classifier + descriptor-KS composite (+ Evidently/embedding options) |
 | Packaging          | multi-stage Docker, non-root, read-only  |
 | Infra              | Terraform (ECR, S3, VPC/EKS, IRSA, SM)   |
 | Config mgmt        | Ansible (VM path)                        |
