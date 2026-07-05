@@ -79,7 +79,7 @@ CronJob every minute), with the canary's candidate made unloadable — see
 - In-cluster traffic probe (1 req/s): **1248/1248 HTTP 200** from the moment the fixed
   image rolled, with zero non-200 through the broken-canary deploy and rollback.
 
-**Test suite: 70 passed** — unit + integration + **6 fallback/chaos tests** (including the
+**Test suite: 74 passed** — unit + integration + **6 fallback/chaos tests** (including the
 hanging-registry case), detector-protocol tests, benchmark smoke tests, Helm chart contract
 tests, and wire-contract tests (round-trip, tamper evidence, version policy).
 
@@ -128,26 +128,32 @@ detection on genuine drift = 1.00; false-positive rate on `no_drift` = 0.00.**
 | gradual_topic     | **1.00**  | 0.0130   | 0.7182          | 0/5       | 0/5          | **5/5**  |
 | char_noise        | **1.00**  | 0.0145   | 0.7198          | 0/5       | 0/5          | **5/5**  |
 | token_dropout     | 1.00      | 3.3188   | 0.6928          | 5/5       | 0/5          | 5/5      |
+| semantic_rotation | **1.00**  | 0.0215   | **0.9648**      | 0/5       | **5/5**      | **0/5**  |
 
-PSI fires only on token-count shifts; the domain classifier carries the strong semantic
-categories; the descriptor-KS layer closes the two previously documented misses
-(`gradual_topic` at 40% injection and `char_noise` at mild severity 0.1, both just under
-the 0.75 AUC gate). Zero false positives on in-distribution windows.
+PSI fires only on token-count shifts; the descriptor-KS layer carries the
+descriptor-visible kinds (including the two old misses, `gradual_topic` and
+`char_noise`); and `semantic_rotation` — frequent in-vocabulary words consistently
+swapped with same-length frequent words, so **every descriptor is preserved by
+construction** — is caught by the domain classifier alone. Zero false positives on
+in-distribution windows.
 
 **Per-detector scorecard (over every kind × seed), source: `benchmarks/results.json`:**
 
 | detector          | precision | recall   | F1       | FPR  |
 |-------------------|-----------|----------|----------|------|
-| psi               | 1.00      | 0.29     | 0.44     | 0.00 |
-| domain_classifier | 1.00      | 0.57     | 0.73     | 0.00 |
-| descriptor_ks     | 1.00      | 1.00     | 1.00     | 0.00 |
+| psi               | 1.00      | 0.25     | 0.40     | 0.00 |
+| domain_classifier | 1.00      | 0.62     | 0.77     | 0.00 |
+| descriptor_ks     | 1.00      | 0.88     | 0.93     | 0.00 |
 | **composite**     | 1.00      | **1.00** | **1.00** | 0.00 |
 
-Before the K-S layer the composite measured **0.71 recall / 0.83 F1** — the benchmark
-history is kept in `benchmarks/README.md`. On this suite the corrected K-S alone matches
-the composite (every generator moves a surface descriptor); the domain classifier stays
-because it reads raw text and covers semantic shifts that preserve all five descriptors,
-where a descriptor K-S is structurally blind.
+**No single layer matches the composite**: the corrected K-S misses what only reading
+the words can see (`semantic_rotation`), the domain classifier misses mild
+descriptor drift, and the any-rule union is the only detector at 1.00 — at zero
+false-positive cost. The evolution (two-layer 0.71 → head-to-head loss → absorbed the
+classical method → added the case it can't see) is kept in `benchmarks/README.md`; in
+the same head-to-head, Evidently and the scipy K-S baseline score **0.00** on
+`semantic_rotation` structurally, making DriftGuard the only compared tool at 1.00 F1
+with zero false alarms.
 
 **Streaming detection latency (`make benchmark-stream`), source:
 `benchmarks/results_streaming.json`.** Composite detector over a stream with a change

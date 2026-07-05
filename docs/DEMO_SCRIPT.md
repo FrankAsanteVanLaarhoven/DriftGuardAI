@@ -143,13 +143,16 @@ Then land the production-readiness numbers (no command — they're measured and 
 
 - **"How is this different from Evidently / Arize / NannyML?"** Those are excellent at *monitoring
   and detection* — and we didn't just claim that, we **measured it**: a same-protocol head-to-head
-  (shared reference, shared descriptor features, each tool's native decision rule) has DriftGuard's
-  composite at **1.00 F1 / 0.00 FPR** vs Evidently 0.92 and NannyML at perfect recall but a **100%
-  false-alarm rate** on clean windows at this reference size (`benchmarks/README.md`). The first
-  run of that benchmark had a plain scipy K-S *beating* our composite — we published that, then
-  absorbed the method as a third detector layer. But the real differentiator is the **promotion
-  decision**: the decision-quality table (promotion precision 1.00, recall 0.89, unsafe promotion
-  rate 0.00 for the dual gate) measures something none of those tools define.
+  (shared reference, shared descriptor features, each tool's native decision rule) has DriftGuard
+  as the **only tool at 1.00 F1 / 0.00 FPR** — Evidently 0.86, the scipy K-S baseline 0.93, and
+  NannyML at perfect recall but a **100% false-alarm rate** on clean windows at this reference
+  size (`benchmarks/README.md`). The arc matters: the first run had the plain K-S *beating* our
+  composite — we published that, absorbed the method as a third layer, then added
+  `semantic_rotation`, a drift kind that preserves every surface descriptor by construction —
+  Evidently and the K-S baseline score **0.00** on it structurally; only reading the words
+  catches it. And the real differentiator is still the **promotion decision**: the
+  decision-quality table (promotion precision 1.00, recall 0.89, unsafe promotion rate 0.00 for
+  the dual gate) measures something none of those tools define.
 - **"Is the drift synthetic?"** Yes — controlled and seeded, to isolate mechanisms cleanly. The
   benchmark harness is designed so real drift streams drop in. This is stated plainly in the
   case study and manuscript.
@@ -179,9 +182,10 @@ Then land the production-readiness numbers (no command — they're measured and 
 | 5 | Grafana `:3001` | "live metrics + Helm canary with measured auto-rollback" | rollback **50 s**, probe **1248/1248 · 200** |
 | 6 | — | "reusable, measurable, three instances, reproducible" | — |
 
-**Numbers to have loaded for Q&A:** head-to-head **1.00 F1 / 0.00 FPR** (Evidently 0.92 · NannyML
-FPR 1.00); decision quality **precision 1.00 / recall 0.89 / unsafe rate 0.00**; detection
-boundary ≤10% injection; test suite **70 passed**.
+**Numbers to have loaded for Q&A:** head-to-head — DriftGuard the **only 1.00 F1 / 0.00 FPR**
+(Evidently 0.86 · KS baseline 0.93 · NannyML FPR 1.00); `semantic_rotation` missed 0.00 by every
+descriptor tool, caught by the domain classifier (AUC 0.965); decision quality **precision 1.00 /
+recall 0.89 / unsafe rate 0.00**; detection boundary ≤10% injection; test suite **74 passed**.
 
 **Fallbacks if time is short:** skip step 4 live (the step-3 table already shows tabular). If the
 network is flaky, the executed notebook `notebooks/ag_news_drift_demo.ipynb` has all figures

@@ -91,37 +91,48 @@
       "fired_domain": 0,
       "fired_ks": 5,
       "n_seeds": 5
+    },
+    {
+      "kind": "semantic_rotation",
+      "is_drift": true,
+      "detection_rate": 1.0,
+      "mean_psi": 0.021496777191394745,
+      "mean_domain_auc": 0.9648472222222222,
+      "fired_psi": 0,
+      "fired_domain": 5,
+      "fired_ks": 0,
+      "n_seeds": 5
     }
   ],
   "detector_scorecard": {
     "psi": {
       "precision": 1.0,
-      "recall": 0.2857142857142857,
-      "f1": 0.4444444444444445,
+      "recall": 0.25,
+      "f1": 0.4,
       "fpr": 0.0,
       "tp": 10,
       "fp": 0,
-      "fn": 25,
+      "fn": 30,
       "tn": 5
     },
     "domain_classifier": {
       "precision": 1.0,
-      "recall": 0.5714285714285714,
-      "f1": 0.7272727272727273,
+      "recall": 0.625,
+      "f1": 0.7692307692307693,
       "fpr": 0.0,
-      "tp": 20,
+      "tp": 25,
       "fp": 0,
       "fn": 15,
       "tn": 5
     },
     "descriptor_ks": {
       "precision": 1.0,
-      "recall": 1.0,
-      "f1": 1.0,
+      "recall": 0.875,
+      "f1": 0.9333333333333333,
       "fpr": 0.0,
       "tp": 35,
       "fp": 0,
-      "fn": 0,
+      "fn": 5,
       "tn": 5
     },
     "composite": {
@@ -129,7 +140,7 @@
       "recall": 1.0,
       "f1": 1.0,
       "fpr": 0.0,
-      "tp": 35,
+      "tp": 40,
       "fp": 0,
       "fn": 0,
       "tn": 5

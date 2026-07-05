@@ -68,6 +68,46 @@ def test_vocab_concept_drift_transform_is_deterministic():
     assert vocab_drift(text, p=0.0) == text   # p=0 is a no-op
 
 
+def test_semantic_rotation_preserves_every_descriptor_by_construction():
+    pool = _pool()
+    rng = random.Random(7)
+    mapping = gen._rotation_mapping(pool, rng)
+    assert mapping and all(k != v and len(k) == len(v) for k, v in mapping.items())
+
+    # Apply at severity 1.0 and compare each text with its own rotation: token count
+    # and every per-word character length must be identical — which pins token_count,
+    # char_count, and mean_word_len exactly; alpha->alpha pins non_alpha_rate; the
+    # frequency floor pins oov_rate.
+    texts = pool["text"].tolist()[:100]
+    rot_rng = random.Random(8)
+    changed = 0
+    for t in texts:
+        words = t.split()
+        rotated = [mapping[w.lower()] if w.isalpha() and w.lower() in mapping else w
+                   for w in words]
+        assert len(rotated) == len(words)
+        assert [len(w) for w in rotated] == [len(w) for w in words]
+        changed += sum(1 for a, b in zip(words, rotated, strict=True) if a != b)
+    assert changed > 100  # the rotation genuinely rewrites a lot of content
+    del rot_rng
+
+
+def test_semantic_rotation_is_caught_by_reading_words_not_descriptors():
+    settings = get_settings()
+    pool = _pool()
+    reference = textdrift.load_reference_texts(settings)
+    ref_dist = drift.load_reference(settings)
+
+    window = gen.semantic_rotation(pool, 300, random.Random(3), severity=0.7)
+    result = textdrift.composite_drift(window, reference, ref_dist, settings)
+    # The whole point: descriptors are preserved, so PSI and descriptor-KS abstain...
+    assert result["signals"]["psi"]["drift"] is False
+    assert result["signals"]["descriptor_ks"]["drift"] is False
+    # ...and only the detector that reads the words catches it.
+    assert result["signals"]["domain_classifier"]["drift"] is True
+    assert result["drift"] is True
+
+
 def test_new_families_are_detected():
     settings = get_settings()
     pool = _pool()

@@ -213,9 +213,9 @@ Mean detection on genuine drift **1.00**, false-positive rate on `no_drift` **0.
 
 | detector | precision | recall | F1 | FPR |
 |----------|-----------|--------|----|-----|
-| PSI | 1.00 | 0.29 | 0.44 | 0.00 |
-| domain_classifier | 1.00 | 0.57 | 0.73 | 0.00 |
-| descriptor_ks | 1.00 | 1.00 | 1.00 | 0.00 |
+| PSI | 1.00 | 0.25 | 0.40 | 0.00 |
+| domain_classifier | 1.00 | 0.62 | 0.77 | 0.00 |
+| descriptor_ks | 1.00 | 0.88 | 0.93 | 0.00 |
 | **composite** | 1.00 | **1.00** | **1.00** | 0.00 |
 
 The layered story, in the order it was measured: PSI fires only on length shifts; the domain
@@ -227,8 +227,14 @@ baseline (`benchmarks/head_to_head.py`) then showed the *classical* test winning
 outright (1.00 F1) — every generator moves at least one surface descriptor. That finding was
 absorbed rather than argued with: a third **descriptor-KS layer** (five text descriptors,
 family-wise α=0.05) closed the `gradual_topic`/`char_noise` gap, bringing the composite to
-1.00/1.00 at zero FPR. The suite's stated open gap: it lacks a descriptor-*preserving* semantic
-generator, so the domain classifier's unique-coverage claim there is design, not yet measurement.
+1.00/1.00 at zero FPR. The converse gap was then closed too: a ninth generator,
+`semantic_rotation` (frequent in-vocabulary words consistently swapped with same-length
+frequent words — all five descriptors preserved **by construction**), is missed by PSI and the
+K-S layer (0/5 each) and caught by the domain classifier alone (AUC 0.9648, 5/5). With it, no
+single layer matches the composite (K-S 0.93, domain 0.77 vs composite 1.00), and in the
+head-to-head Evidently and the classical baseline score **0.00** on that kind structurally —
+the multi-layer claim, and the comparison differentiator, are both measurement rather than
+design.
 
 ### 5.2 Detection boundary (severity sweep)
 

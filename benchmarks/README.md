@@ -39,31 +39,34 @@ Mean detection on genuine drift = **1.00**; false-positive rate on `no_drift` = 
 | gradual_topic     | **1.00**  | 0.0130   | 0.7182          | 0/5       | 0/5          | **5/5**  |
 | char_noise        | **1.00**  | 0.0145   | 0.7198          | 0/5       | 0/5          | **5/5**  |
 | token_dropout     | 1.00      | 3.3188   | 0.6928          | 5/5       | 0/5          | 5/5      |
+| semantic_rotation | **1.00**  | 0.0215   | **0.9648**      | 0/5       | **5/5**      | **0/5**  |
 
-**Reading it.** PSI fires only on token-count shifts; the domain classifier carries the
-strong semantic categories; and the descriptor-KS layer — added after the head-to-head
-below showed exactly this test beating the two-layer composite — picks up the two
-documented misses: `gradual_topic` at 40% injection and `char_noise` at mild severity
-0.1, both of which sit just under the 0.75 AUC gate. `no_drift` still produces zero
-false positives (the K-S is Bonferroni-corrected across its five descriptor columns).
+**Reading it.** PSI fires only on token-count shifts; the descriptor-KS layer — added
+after the head-to-head below showed exactly this test beating the two-layer composite —
+carries the descriptor-visible kinds including the two old misses (`gradual_topic`,
+`char_noise`); and `semantic_rotation` is the **converse case, built to close the last
+unmeasured claim**: frequent in-vocabulary words consistently swapped with other
+frequent words of the *same character length*, so all five descriptors are preserved by
+construction — PSI and K-S abstain (0/5), and **only the detector that reads the words
+catches it** (domain classifier, AUC 0.9648, 5/5). `no_drift` still produces zero false
+positives.
 
 ### Per-detector scorecard (ground truth = `is_drift`, over every kind × seed)
 
 | detector          | precision | recall | F1   | FPR  |
 |-------------------|-----------|--------|------|------|
-| psi               | 1.00      | 0.29   | 0.44 | 0.00 |
-| domain_classifier | 1.00      | 0.57   | 0.73 | 0.00 |
-| descriptor_ks     | 1.00      | 1.00   | 1.00 | 0.00 |
+| psi               | 1.00      | 0.25   | 0.40 | 0.00 |
+| domain_classifier | 1.00      | 0.62   | 0.77 | 0.00 |
+| descriptor_ks     | 1.00      | 0.88   | 0.93 | 0.00 |
 | **composite**     | 1.00      | **1.00** | **1.00** | 0.00 |
 
-Before the K-S layer the composite scored **0.71 recall / 0.83 F1** (misses:
-`gradual_topic`, `char_noise`) — the two-layer numbers this README used to headline.
-On this suite the corrected K-S alone matches the full composite: every generator here
-moves at least one surface descriptor. The layers are **not** redundant — the domain
-classifier reads raw text and needs no descriptor engineering, so it covers semantic
-shifts that preserve all five descriptors (paraphrase-style drift, topic shifts within
-vocabulary), where a descriptor K-S is structurally blind. The suite should grow such a
-generator; until it does, that coverage claim is design, not measurement.
+The evolution, kept honest: the two-layer composite scored 0.71/0.83 (misses:
+`gradual_topic`, `char_noise`); the head-to-head then showed a corrected classical K-S
+beating it, so the composite absorbed one; and with `semantic_rotation` in the suite,
+**no single layer matches the composite any more** — the K-S misses what only reading
+the words can see (0.88), the domain classifier misses mild descriptor drift (0.62),
+and the any-rule union is the only detector at 1.00, still at zero false-positive cost.
+The multi-layer claim is now measurement, not design.
 
 ## Head-to-head: DriftGuard vs Evidently vs NannyML (`make benchmark-h2h`)
 
@@ -96,28 +99,31 @@ Measured run (5 seeds, window 600, composite including the descriptor-KS layer):
 | gradual_topic | True | 1.00 | 1.00 | 1.00 | 1.00 |
 | char_noise | True | 1.00 | 0.00 | 1.00 | 1.00 |
 | token_dropout | True | 1.00 | 1.00 | 1.00 | 1.00 |
+| semantic_rotation | True | **1.00** | **0.00** | 1.00 | **0.00** |
 
 | tool | precision | recall | F1 | FPR | s/window |
 |---|---|---|---|---|---|
-| **driftguard** | **1.00** | **1.00** | **1.00** | **0.00** | 0.248 |
-| evidently | 1.00 | 0.86 | 0.92 | 0.00 | 0.175 |
-| nannyml | 0.88 | 1.00 | 0.93 | **1.00** | 0.006 |
-| ks_baseline | 1.00 | 1.00 | 1.00 | 0.00 | 0.008 |
+| **driftguard** | **1.00** | **1.00** | **1.00** | **0.00** | 0.218 |
+| evidently | 1.00 | 0.75 | 0.86 | 0.00 | 0.165 |
+| nannyml | 0.89 | 1.00 | 0.94 | **1.00** | 0.005 |
+| ks_baseline | 1.00 | 0.88 | 0.93 | 0.00 | 0.008 |
 
-**The before/after — kept honest.** The first run of this benchmark scored the
-then-two-layer composite at **0.77 recall / 0.87 F1**, *behind* the plain `ks_baseline`
-(1.00) and Evidently (0.92): every generator in this suite moves at least one surface
-descriptor, and a Bonferroni-corrected classical test at these sample sizes is extremely
-sensitive to that. The response was to **absorb the winning method**: the composite now
-carries a descriptor-KS layer (`driftguard.detectors.DescriptorKSDetector`), and the
-re-run above ties the classical baseline at 1.00/0.00 while keeping the domain
-classifier for semantic shifts that preserve all five descriptors — where a descriptor
-K-S is structurally blind. Of the comparators: Evidently's native share-≥-0.5 rule
-trades recall for zero false alarms (it misses `char_noise`, where only one column
-moves); NannyML reaches perfect recall but **alarms on every clean window** — its
-std-band thresholds are calibrated from only ten 150-row reference chunks, far below
-what its docs target; its real strength (per D3Bench) is linking drift to performance
-impact over long analysis periods, not small-window alarming.
+**The full arc — kept honest.** Run one: the then-two-layer composite scored **0.77
+recall / 0.87 F1**, *behind* the plain `ks_baseline` (1.00) and Evidently (0.92) —
+every generator then in the suite moved at least one surface descriptor, and a
+Bonferroni-corrected classical test at these sample sizes is extremely sensitive to
+that. Response: **absorb the winning method** (the descriptor-KS layer), which tied the
+classical baseline at 1.00/0.00. Then the suite gained the case the classical method
+cannot see: `semantic_rotation` preserves all five descriptors by construction, so
+**Evidently and the K-S baseline score 0.00 on it — structurally, not by tuning** —
+while the domain classifier reads the words and catches it. Result: DriftGuard is the
+**only tool at 1.00 F1 with zero false alarms**, because it carries both the classical
+layer and the learned one. (NannyML's 1.00 on `semantic_rotation` comes the same way as
+its 1.00 on clean windows — its std-band thresholds alarm on everything at this
+reference size, far below what its docs target; its real strength per D3Bench is
+linking drift to performance impact over long analysis periods, not small-window
+alarming. Evidently's native share-≥-0.5 rule also misses `char_noise`, where only one
+column moves.)
 
 The remaining conclusion stands: window-level detection on descriptor-visible drift is
 commoditized — the differentiator is that none of these tools answers the question

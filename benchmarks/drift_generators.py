@@ -14,6 +14,11 @@ Kinds:
     gradual_topic       inject an increasing fraction of foreign-vocabulary documents
     char_noise          character-level typo/OCR corruption (insert/delete/substitute)
     token_dropout       drop a fraction of tokens (truncated/degraded logging input)
+    semantic_rotation   descriptor-PRESERVING semantic shift: frequent in-vocabulary
+                        words consistently swapped with other frequent words of the
+                        same character length — surface statistics unchanged, meaning
+                        scrambled (the case where descriptor-based detectors are
+                        structurally blind and only reading the words can help)
 """
 
 from __future__ import annotations
@@ -129,6 +134,49 @@ def token_dropout(pool: pd.DataFrame, n: int, rng: random.Random,
     return out
 
 
+def _rotation_mapping(pool: pd.DataFrame, rng: random.Random,
+                      min_count: int = 100) -> dict[str, str]:
+    """A consistent word→word rotation within same-length buckets of *frequent*
+    in-vocabulary words. Same length keeps token/char/word-length descriptors
+    identical; the ``min_count`` floor keeps both source and target words common
+    enough that any reasonable reference sample contains them, so oov_rate stays
+    put too. Rotating a shuffled bucket by one guarantees a derangement."""
+    from collections import Counter
+
+    counts = Counter(w.lower() for t in pool["text"] for w in t.split() if w.isalpha())
+    buckets: dict[int, list[str]] = {}
+    for w, c in counts.items():
+        if c >= min_count:
+            buckets.setdefault(len(w), []).append(w)
+    mapping: dict[str, str] = {}
+    for words in buckets.values():
+        if len(words) < 2:
+            continue
+        shuffled = sorted(words)
+        rng.shuffle(shuffled)
+        for src, dst in zip(shuffled, shuffled[1:] + shuffled[:1], strict=True):
+            mapping[src] = dst
+    return mapping
+
+
+def semantic_rotation(pool: pd.DataFrame, n: int, rng: random.Random,
+                      severity: float = 0.5) -> list[str]:
+    # Descriptor-preserving semantic drift: every replacement is 1:1, same character
+    # length, alphabetic-for-alphabetic, frequent-for-frequent — token_count,
+    # char_count, mean_word_len, oov_rate, and non_alpha_rate are all unchanged by
+    # construction, yet word frequencies (and meaning) shift consistently. Only a
+    # detector that reads the words (the domain classifier) can separate the corpora.
+    mapping = _rotation_mapping(pool, rng)
+    out = []
+    for t in _sample_texts(pool["text"].tolist(), n, rng):
+        words = t.split()
+        out.append(" ".join(
+            mapping[w.lower()] if w.isalpha() and w.lower() in mapping
+            and rng.random() < severity else w
+            for w in words))
+    return out
+
+
 GENERATORS = {
     "no_drift": no_drift,
     "length_truncate": length_truncate,
@@ -138,6 +186,7 @@ GENERATORS = {
     "gradual_topic": gradual_topic,
     "char_noise": char_noise,
     "token_dropout": token_dropout,
+    "semantic_rotation": semantic_rotation,
 }
 
 # Whether each kind is expected to be genuine drift (for scoring detection vs FPR).
@@ -150,4 +199,5 @@ IS_DRIFT = {
     "gradual_topic": True,
     "char_noise": True,
     "token_dropout": True,
+    "semantic_rotation": True,
 }

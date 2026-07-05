@@ -117,8 +117,10 @@ benchmark harness."
 ### Delivery notes
 - **6–8 minutes.** Slides 4–5 are the core; don't rush them.
 - If time is tight, drop Slide 6's live run (the Slide-5 table already shows two modalities).
-- Differentiator to keep ready, now **measured**: *"vs Evidently/NannyML — we ran the same-protocol
-  head-to-head: composite **1.00 F1 / 0.00 FPR** vs Evidently 0.92 and NannyML at 100% false alarms
-  on clean windows. The first run had a plain K-S beating us — we published that, then absorbed the
-  method. And the decision-quality table (promotion precision 1.00 / unsafe rate 0.00) measures
-  what monitoring tools don't define: whether the **promotion decision** was safe."*
+- Differentiator to keep ready, now **measured**: *"vs Evidently/NannyML — same-protocol
+  head-to-head: DriftGuard is the **only tool at 1.00 F1 / 0.00 FPR** (Evidently 0.86, scipy-KS
+  0.93, NannyML 100% false alarms on clean windows). The arc: a plain K-S beat us in round one —
+  we published that, absorbed the method, then added `semantic_rotation`, a drift kind that
+  preserves every surface descriptor — descriptor tools score **0.00 structurally**; only reading
+  the words catches it. And the decision-quality table (promotion precision 1.00 / unsafe rate
+  0.00) measures what monitoring tools don't define: whether the **promotion decision** was safe."*
