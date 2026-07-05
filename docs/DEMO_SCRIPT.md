@@ -153,6 +153,16 @@ Then land the production-readiness numbers (no command — they're measured and 
   catches it. And the real differentiator is still the **promotion decision**: the
   decision-quality table (promotion precision 1.00, recall 0.89, unsafe promotion rate 0.00 for
   the dual gate) measures something none of those tools define.
+- **"Why not just gate on a refreshed holdout?"** Because we **measured what that ships**: scored
+  against a ground-truth safety oracle, a refreshed-only gate promotes every candidate that
+  recovered on new data — including all the catastrophic-forgetting ones — for a **25% unsafe
+  promotion rate**. A fixed-only gate is safe but blocks 7 of 9 safe recoveries. The dual gate:
+  zero unsafe, 0.89 recall. That three-row table (`benchmarks/README.md`) *is* the thesis.
+- **"Can I use my own drift detectors?"** Yes — the detector interface is pluggable
+  (`fit`/`detect` protocol; PSI, domain classifier, descriptor-KS, and MMD ship as instances,
+  adapted per modality by a `values_fn`/estimator, not new detector code). Detection triggers
+  retraining; the governance layer decides promotion regardless of which detectors fired —
+  they're deliberately decoupled.
 - **"Is the drift synthetic?"** Yes — controlled and seeded, to isolate mechanisms cleanly. The
   benchmark harness is designed so real drift streams drop in. This is stated plainly in the
   case study and manuscript.
