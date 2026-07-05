@@ -78,6 +78,11 @@ class Settings(BaseSettings):
     # Drift detection
     psi_threshold: float = 0.2  # >0.2 = action per common PSI convention
     psi_bins: int = 10
+    # Descriptor-KS layer: per-column two-sample K-S over the text descriptors,
+    # Bonferroni-corrected to this family-wise alpha. Absorbed from the head-to-head
+    # benchmark, where the corrected classical test closed the composite's recall gap
+    # on descriptor-visible drift at zero false-positive cost.
+    descriptor_ks_alpha: float = 0.05
     # Text-aware (domain-classifier) drift: reference-vs-current separability AUC.
     # 0.5 = indistinguishable (no drift); -> 1.0 = strongly separable (drift).
     domain_auc_threshold: float = 0.75

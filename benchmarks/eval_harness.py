@@ -71,6 +71,7 @@ def run(seeds: int = 5, window: int = 600) -> dict:
                 "is_drift": gen.IS_DRIFT[kind],
                 "psi": result["signals"]["psi"]["drift"],
                 "domain_classifier": result["signals"]["domain_classifier"]["drift"],
+                "descriptor_ks": result["signals"]["descriptor_ks"]["drift"],
                 "composite": result["drift"],
             })
         n = len(detections)
@@ -82,6 +83,7 @@ def run(seeds: int = 5, window: int = 600) -> dict:
             "mean_domain_auc": statistics.mean(aucs),
             "fired_psi": attributions.count("psi"),
             "fired_domain": attributions.count("domain_classifier"),
+            "fired_ks": attributions.count("descriptor_ks"),
             "n_seeds": n,
         })
 
@@ -96,7 +98,8 @@ def run(seeds: int = 5, window: int = 600) -> dict:
         ),
         "rows": rows,
         "detector_scorecard": {
-            det: _score(records, det) for det in ("psi", "domain_classifier", "composite")
+            det: _score(records, det)
+            for det in ("psi", "domain_classifier", "descriptor_ks", "composite")
         },
     }
     return summary
@@ -150,14 +153,16 @@ def to_markdown(summary: dict) -> str:
         f"Mean detection on drift={summary['mean_detection_rate_on_drift']:.2f}, "
         f"FPR(no_drift)={summary['false_positive_rate_no_drift']:.2f}",
         "",
-        "| drift kind | is_drift | detection | mean PSI | mean AUC | PSI fired | domain fired |",
-        "|---|---|---|---|---|---|---|",
+        "| drift kind | is_drift | detection | mean PSI | mean AUC | PSI fired "
+        "| domain fired | KS fired |",
+        "|---|---|---|---|---|---|---|---|",
     ]
     for r in summary["rows"]:
         lines.append(
             f"| {r['kind']} | {r['is_drift']} | {r['detection_rate']:.2f} | "
             f"{r['mean_psi']:.4f} | {r['mean_domain_auc']:.4f} | "
-            f"{r['fired_psi']}/{r['n_seeds']} | {r['fired_domain']}/{r['n_seeds']} |"
+            f"{r['fired_psi']}/{r['n_seeds']} | {r['fired_domain']}/{r['n_seeds']} | "
+            f"{r['fired_ks']}/{r['n_seeds']} |"
         )
     sc = summary.get("detector_scorecard")
     if sc:
@@ -168,7 +173,7 @@ def to_markdown(summary: dict) -> str:
             "| detector | precision | recall | F1 | FPR |",
             "|---|---|---|---|---|",
         ]
-        for det in ("psi", "domain_classifier", "composite"):
+        for det in ("psi", "domain_classifier", "descriptor_ks", "composite"):
             d = sc[det]
             lines.append(f"| {det} | {d['precision']:.2f} | {d['recall']:.2f} | "
                          f"{d['f1']:.2f} | {d['fpr']:.2f} |")

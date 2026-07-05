@@ -1,7 +1,7 @@
 {
   "seeds": 5,
   "window": 600,
-  "mean_detection_rate_on_drift": 0.7142857142857143,
+  "mean_detection_rate_on_drift": 1.0,
   "false_positive_rate_no_drift": 0.0,
   "rows": [
     {
@@ -12,6 +12,7 @@
       "mean_domain_auc": 0.5215,
       "fired_psi": 0,
       "fired_domain": 0,
+      "fired_ks": 0,
       "n_seeds": 5
     },
     {
@@ -22,6 +23,7 @@
       "mean_domain_auc": 0.9735888888888888,
       "fired_psi": 5,
       "fired_domain": 5,
+      "fired_ks": 5,
       "n_seeds": 5
     },
     {
@@ -32,6 +34,7 @@
       "mean_domain_auc": 0.7958833333333334,
       "fired_psi": 0,
       "fired_domain": 5,
+      "fired_ks": 5,
       "n_seeds": 5
     },
     {
@@ -42,6 +45,7 @@
       "mean_domain_auc": 0.9978277777777778,
       "fired_psi": 0,
       "fired_domain": 5,
+      "fired_ks": 5,
       "n_seeds": 5
     },
     {
@@ -52,26 +56,29 @@
       "mean_domain_auc": 1.0,
       "fired_psi": 0,
       "fired_domain": 5,
+      "fired_ks": 5,
       "n_seeds": 5
     },
     {
       "kind": "gradual_topic",
       "is_drift": true,
-      "detection_rate": 0.0,
+      "detection_rate": 1.0,
       "mean_psi": 0.012953538580793785,
       "mean_domain_auc": 0.7181916666666667,
       "fired_psi": 0,
       "fired_domain": 0,
+      "fired_ks": 5,
       "n_seeds": 5
     },
     {
       "kind": "char_noise",
       "is_drift": true,
-      "detection_rate": 0.0,
+      "detection_rate": 1.0,
       "mean_psi": 0.014510478968821346,
       "mean_domain_auc": 0.7197805555555555,
       "fired_psi": 0,
       "fired_domain": 0,
+      "fired_ks": 5,
       "n_seeds": 5
     },
     {
@@ -82,6 +89,7 @@
       "mean_domain_auc": 0.6928444444444444,
       "fired_psi": 5,
       "fired_domain": 0,
+      "fired_ks": 5,
       "n_seeds": 5
     }
   ],
@@ -106,14 +114,24 @@
       "fn": 15,
       "tn": 5
     },
+    "descriptor_ks": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "fpr": 0.0,
+      "tp": 35,
+      "fp": 0,
+      "fn": 0,
+      "tn": 5
+    },
     "composite": {
       "precision": 1.0,
-      "recall": 0.7142857142857143,
-      "f1": 0.8333333333333333,
+      "recall": 1.0,
+      "f1": 1.0,
       "fpr": 0.0,
-      "tp": 25,
+      "tp": 35,
       "fp": 0,
-      "fn": 10,
+      "fn": 0,
       "tn": 5
     }
   }

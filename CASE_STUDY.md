@@ -91,10 +91,11 @@ CronJob every minute), with the canary's candidate made unloadable — see
 The drift→retrain pipeline detected the shift, retrained a candidate, ran the
 fail-closed gate, held at the human gate, and only then promoted.
 
-### Multi-layer detection (PSI + domain-classifier)
+### Multi-layer detection
 
 Measured with `python -m driftguard.textdrift` — a text-aware domain classifier
-(cross-validated ROC-AUC, threshold 0.75) run alongside PSI:
+(cross-validated ROC-AUC, threshold 0.75) run alongside PSI (the composite has since
+gained a third, descriptor-KS layer — see the benchmark section below):
 
 | Sample                | PSI (token_count) | Domain-classifier AUC | Verdict |
 |-----------------------|-------------------|-----------------------|---------|
@@ -109,25 +110,27 @@ reproducible case for multi-layer, text-aware drift detection.
 
 ### Drift-injection benchmark (`make benchmark`, 5 seeds, window 600)
 
-Controlled generators (Garcia-style) scored by the composite detector. **Mean
-detection on genuine drift = 0.71; false-positive rate on `no_drift` = 0.00.**
+Controlled generators (Garcia-style) scored by the composite detector — now three
+layers: PSI + domain-classifier + **descriptor-KS** (Bonferroni-corrected two-sample
+K-S over five text descriptors, absorbed from the head-to-head benchmark where exactly
+that classical test beat the two-layer composite; see `benchmarks/README.md`). **Mean
+detection on genuine drift = 1.00; false-positive rate on `no_drift` = 0.00.**
 
-| drift kind        | detection | mean PSI | mean domain AUC | PSI fired | domain fired |
-|-------------------|-----------|----------|-----------------|-----------|--------------|
-| no_drift          | 0.00      | 0.0130   | 0.5215          | 0/5       | 0/5          |
-| length_truncate   | 1.00      | 12.5169  | 0.9736          | 5/5       | 5/5          |
-| class_prior_shift | 1.00      | 0.0535   | 0.7959          | 0/5       | 5/5          |
-| adjective_swap    | 1.00      | 0.0130   | 0.9978          | 0/5       | 5/5          |
-| semantic_replace  | 1.00      | 0.0130   | 1.0000          | 0/5       | 5/5          |
-| gradual_topic     | 0.00      | 0.0130   | 0.7182          | 0/5       | 0/5          |
-| char_noise        | 0.00      | 0.0145   | 0.7198          | 0/5       | 0/5          |
-| token_dropout     | 1.00      | 3.3188   | 0.6928          | 5/5       | 0/5          |
+| drift kind        | detection | mean PSI | mean domain AUC | PSI fired | domain fired | KS fired |
+|-------------------|-----------|----------|-----------------|-----------|--------------|----------|
+| no_drift          | 0.00      | 0.0130   | 0.5215          | 0/5       | 0/5          | 0/5      |
+| length_truncate   | 1.00      | 12.5169  | 0.9736          | 5/5       | 5/5          | 5/5      |
+| class_prior_shift | 1.00      | 0.0535   | 0.7959          | 0/5       | 5/5          | 5/5      |
+| adjective_swap    | 1.00      | 0.0130   | 0.9978          | 0/5       | 5/5          | 5/5      |
+| semantic_replace  | 1.00      | 0.0130   | 1.0000          | 0/5       | 5/5          | 5/5      |
+| gradual_topic     | **1.00**  | 0.0130   | 0.7182          | 0/5       | 0/5          | **5/5**  |
+| char_noise        | **1.00**  | 0.0145   | 0.7198          | 0/5       | 0/5          | **5/5**  |
+| token_dropout     | 1.00      | 3.3188   | 0.6928          | 5/5       | 0/5          | 5/5      |
 
-PSI fires only on token-count shifts (`length_truncate`, `token_dropout`); every
-semantic category is carried by the domain classifier. Zero false positives on
-in-distribution windows. Two misses sit just under the 0.75 gate — `gradual_topic` at
-40% injection (0.7182) and `char_noise` at mild severity 0.1 (0.7198) — the honest hard
-cases, caught at higher severity or a lower threshold at some false-positive cost.
+PSI fires only on token-count shifts; the domain classifier carries the strong semantic
+categories; the descriptor-KS layer closes the two previously documented misses
+(`gradual_topic` at 40% injection and `char_noise` at mild severity 0.1, both just under
+the 0.75 AUC gate). Zero false positives on in-distribution windows.
 
 **Per-detector scorecard (over every kind × seed), source: `benchmarks/results.json`:**
 
@@ -135,11 +138,14 @@ cases, caught at higher severity or a lower threshold at some false-positive cos
 |-------------------|-----------|----------|----------|------|
 | psi               | 1.00      | 0.29     | 0.44     | 0.00 |
 | domain_classifier | 1.00      | 0.57     | 0.73     | 0.00 |
-| **composite**     | 1.00      | **0.71** | **0.83** | 0.00 |
+| descriptor_ks     | 1.00      | 1.00     | 1.00     | 0.00 |
+| **composite**     | 1.00      | **1.00** | **1.00** | 0.00 |
 
-The multi-layer detector **more than doubles recall over PSI alone (0.29 → 0.71) at zero
-false-positive cost** — the quantified headline for "the domain classifier catches what
-PSI misses".
+Before the K-S layer the composite measured **0.71 recall / 0.83 F1** — the benchmark
+history is kept in `benchmarks/README.md`. On this suite the corrected K-S alone matches
+the composite (every generator moves a surface descriptor); the domain classifier stays
+because it reads raw text and covers semantic shifts that preserve all five descriptors,
+where a descriptor K-S is structurally blind.
 
 **Streaming detection latency (`make benchmark-stream`), source:
 `benchmarks/results_streaming.json`.** Composite detector over a stream with a change
@@ -156,12 +162,13 @@ alarms on every pattern**:
 Fires within one window of an abrupt/incremental change, lags ~1.3 windows on gradual
 drift, and never false-alarms before the change point.
 
-**Detection boundary (`make benchmark-sweep`, gradual_topic, 5 seeds).** The
-domain-classifier AUC rises monotonically with injection fraction and crosses the 0.75
-gate at ~50% injection (0.40→0.7067 miss, 0.50→0.7639 caught, 0.90→0.9511); PSI stays
-flat at 0.0168 across the whole range. So the single miss above is one point on a clean
-boundary curve, not a random failure — the operating threshold sets exactly where
-gradual drift is caught.
+**Detection boundary (`make benchmark-sweep`, gradual_topic, 5 seeds).** With the
+descriptor-KS layer the composite detects gradual topic drift at **every injection
+fraction down to 10%** — foreign-vocabulary docs move `oov_rate` decisively at any
+severity. The domain-classifier-only boundary is still visible in the AUC column: it
+rises monotonically and crosses the 0.75 gate at ~50% injection (0.40→0.7067,
+0.50→0.7639, 0.90→0.9511); PSI stays flat at 0.0168 across the whole range. That curve
+remains the operating-point reference for deployments running without the K-S layer.
 
 ### Closed-loop recovery (`make recovery`, vocabulary concept drift p=0.7)
 

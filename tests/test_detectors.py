@@ -6,6 +6,7 @@ import pandas as pd
 
 from driftguard.detectors import (
     CompositeDetector,
+    DescriptorKSDetector,
     DetectionResult,
     DomainClassifierDetector,
     DriftDetector,
@@ -25,7 +26,27 @@ def test_detectors_satisfy_the_protocol():
     assert isinstance(PSIDetector(values_fn=lambda x: [0.0]), DriftDetector)
     assert isinstance(DomainClassifierDetector(LogisticRegression()), DriftDetector)
     assert isinstance(MMDDetector(), DriftDetector)
+    assert isinstance(DescriptorKSDetector(), DriftDetector)
     assert isinstance(CompositeDetector([]), DriftDetector)
+
+
+def test_descriptor_ks_detector_bonferroni_on_tabular_features():
+    rng = np.random.default_rng(0)
+    ref = pd.DataFrame({"a": rng.normal(0, 1, 800), "b": rng.normal(5, 2, 800)})
+    same = pd.DataFrame({"a": rng.normal(0, 1, 300), "b": rng.normal(5, 2, 300)})
+    shifted = same.assign(a=same["a"] + 1.5)      # one column moves
+
+    det = DescriptorKSDetector(alpha=0.05).fit(ref)   # identity features_fn: raw frame
+    quiet = det.detect(same)
+    assert quiet.drift is False
+
+    caught = det.detect(shifted)
+    assert caught.drift is True
+    # Bonferroni: the firing column clears alpha / n_columns, and it is column "a".
+    assert caught.extra["p_values"]["a"] < caught.extra["corrected_alpha"]
+    assert caught.extra["p_values"]["b"] > caught.extra["corrected_alpha"]
+    # DetectionResult convention: higher statistic => more drift.
+    assert caught.statistic > quiet.statistic
 
 
 def test_mmd_detector_on_embeddings():

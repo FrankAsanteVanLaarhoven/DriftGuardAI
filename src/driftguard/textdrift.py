@@ -10,10 +10,18 @@ about completely different things. This module adds detectors that read the word
    AUC → 1.0 ⇒ the two corpora are easily told apart ⇒ drift. This is the
    domain-discriminator idea from Rabanser, Günnemann & Lipton (2019).
 
-2. **Embedding-MMD drift** (optional, behind the ``embed`` extra). Sentence-transformer
+2. **Descriptor-KS drift** (dependency-free). Bonferroni-corrected two-sample K-S over
+   five text descriptors (token_count, char_count, mean_word_len, oov_rate,
+   non_alpha_rate). Absorbed from the head-to-head benchmark, where exactly this
+   classical test beat the learned composite on descriptor-visible drift
+   (``benchmarks/head_to_head.py``) — it closes the composite's ``gradual_topic`` /
+   ``char_noise`` recall gap at zero false-positive cost.
+
+3. **Embedding-MMD drift** (optional, behind the ``embed`` extra). Sentence-transformer
    embeddings + a linear-kernel Maximum Mean Discrepancy.
 
-A ``composite_drift`` combines PSI with the domain classifier: drift if *either* fires.
+A ``composite_drift`` combines PSI, the domain classifier, and descriptor-KS:
+drift if *any* fires (default rule).
 
 CLI::
 
@@ -32,9 +40,42 @@ from typing import Any
 
 from driftguard import drift
 from driftguard.config import Settings, get_settings
-from driftguard.detectors import DomainClassifierDetector, MMDDetector, PSIDetector
+from driftguard.detectors import (
+    DescriptorKSDetector,
+    DomainClassifierDetector,
+    MMDDetector,
+    PSIDetector,
+)
 
 log = logging.getLogger("driftguard.textdrift")
+
+DESCRIPTOR_COLUMNS = ("token_count", "char_count", "mean_word_len",
+                      "oov_rate", "non_alpha_rate")
+
+
+def reference_vocab(texts: list[str]) -> set[str]:
+    return {w for t in texts for w in t.lower().split()}
+
+
+def text_descriptors(texts: list[str], vocab: set[str]):
+    """The five-column descriptor frame the K-S layer (and the head-to-head
+    benchmark) score. ``vocab`` must NOT be built from the same texts used as the
+    K-S reference sample: a self-vocabulary makes the reference's oov_rate
+    identically 0, so any other window trivially separates (a guaranteed false
+    alarm — measured in the head-to-head protocol notes)."""
+    import pandas as pd
+
+    rows = []
+    for t in texts:
+        words = t.split()
+        n_words = len(words) or 1
+        oov = sum(1 for w in words if w.lower() not in vocab)
+        non_alpha = sum(1 for c in t if not (c.isalpha() or c.isspace()))
+        rows.append((len(words), len(t),
+                     sum(len(w) for w in words) / n_words,
+                     oov / n_words,
+                     non_alpha / max(len(t), 1)))
+    return pd.DataFrame(rows, columns=list(DESCRIPTOR_COLUMNS))
 
 
 def _text_domain_estimator():
@@ -66,6 +107,25 @@ def domain_classifier_drift(reference_texts: list[str], current_texts: list[str]
     }
 
 
+def descriptor_ks_drift(reference_texts: list[str], current_texts: list[str],
+                        alpha: float = 0.05) -> dict[str, Any]:
+    """Bonferroni-corrected K-S over the shared text descriptors, via the shared
+    :class:`~driftguard.detectors.DescriptorKSDetector`.
+
+    The reference is split deterministically: even indices build the OOV vocabulary,
+    odd indices form the K-S reference sample — the split that keeps the reference's
+    own descriptors in-family with live windows (see :func:`text_descriptors`).
+    """
+    vocab = reference_vocab(reference_texts[0::2])
+    det = DescriptorKSDetector(
+        features_fn=lambda texts: text_descriptors(texts, vocab), alpha=alpha,
+    ).fit(reference_texts[1::2])
+    r = det.detect(current_texts)
+    return {"detector": "descriptor_ks", "p_min": 1.0 - r.statistic,
+            "corrected_alpha": r.extra["corrected_alpha"], "alpha": alpha,
+            "p_values": r.extra["p_values"], "drift": r.drift}
+
+
 def embedding_mmd_drift(reference_texts: list[str], current_texts: list[str],
                         model_name: str) -> dict[str, Any] | None:
     """Optional: sentence-embedding MMD via the shared :class:`~driftguard.detectors.MMDDetector`
@@ -94,12 +154,15 @@ def composite_drift(current_texts: list[str], reference_texts: list[str],
     psi = psi_det.detect(current_texts)
     dom = domain_classifier_drift(reference_texts, current_texts, settings.random_seed,
                                   settings.domain_auc_threshold)
+    ks = descriptor_ks_drift(reference_texts, current_texts, settings.descriptor_ks_alpha)
 
     signals = {
         "psi": {"value": psi.statistic, "threshold": settings.psi_threshold,
                 "drift": psi.drift},
         "domain_classifier": {"auc": dom["auc"], "threshold": dom["threshold"],
                               "drift": dom["drift"]},
+        "descriptor_ks": {"p_min": ks["p_min"], "corrected_alpha": ks["corrected_alpha"],
+                          "drift": ks["drift"]},
     }
     if use_embed:
         emb = embedding_mmd_drift(current_texts, reference_texts, settings.embed_model)
@@ -116,10 +179,12 @@ def composite_drift(current_texts: list[str], reference_texts: list[str],
 
     if drift_flag:
         log.warning(
-            "DRIFT declared (rule=%s) by %s | PSI=%.4f (thr %.2f) domain_auc=%.4f (thr %.2f)",
+            "DRIFT declared (rule=%s) by %s | PSI=%.4f (thr %.2f) domain_auc=%.4f (thr %.2f) "
+            "ks_p_min=%.2e (alpha %.4f)",
             rule, triggered_by,
             signals["psi"]["value"], settings.psi_threshold,
             signals["domain_classifier"]["auc"], settings.domain_auc_threshold,
+            signals["descriptor_ks"]["p_min"], signals["descriptor_ks"]["corrected_alpha"],
         )
     return {
         "signals": signals,

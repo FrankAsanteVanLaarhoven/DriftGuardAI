@@ -13,6 +13,7 @@ from driftguard.detectors.base import (
     DriftDetector,
 )
 from driftguard.detectors.domain import DomainClassifierDetector
+from driftguard.detectors.ks import DescriptorKSDetector
 from driftguard.detectors.mmd import MMDDetector
 from driftguard.detectors.psi import PSIDetector
 
@@ -22,5 +23,6 @@ __all__ = [
     "CompositeDetector",
     "PSIDetector",
     "DomainClassifierDetector",
+    "DescriptorKSDetector",
     "MMDDetector",
 ]

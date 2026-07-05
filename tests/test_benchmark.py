@@ -87,10 +87,11 @@ def test_detector_scorecard_composite_is_a_superset_of_psi():
 
     summary = run(seeds=1, window=150)
     sc = summary["detector_scorecard"]
-    assert set(sc) == {"psi", "domain_classifier", "composite"}
-    # Composite = PSI OR domain, so it never recalls less than either single detector.
+    assert set(sc) == {"psi", "domain_classifier", "descriptor_ks", "composite"}
+    # Composite = any-rule union, so it never recalls less than any single detector.
     assert sc["composite"]["recall"] >= sc["psi"]["recall"]
     assert sc["composite"]["recall"] >= sc["domain_classifier"]["recall"]
+    assert sc["composite"]["recall"] >= sc["descriptor_ks"]["recall"]
     # The domain classifier carries real signal (catches semantic kinds PSI misses).
     assert sc["domain_classifier"]["recall"] > 0.0
 

@@ -64,32 +64,15 @@ from driftguard.config import get_settings  # noqa: E402
 from driftguard.data import load_split  # noqa: E402
 
 TOOLS = ("driftguard", "evidently", "nannyml", "ks_baseline")
-DESCRIPTOR_COLUMNS = ("token_count", "char_count", "mean_word_len",
-                      "oov_rate", "non_alpha_rate")
 
-
-def reference_vocab(texts: list[str]) -> set[str]:
-    return {w for t in texts for w in t.lower().split()}
-
-
-def build_descriptors(texts: list[str], vocab: set[str]) -> pd.DataFrame:
-    """The shared five-column text-descriptor frame every tabular tool receives.
-
-    ``vocab`` must come from the *training* corpus, not from the reference sample
-    itself — otherwise the reference frame has oov_rate identically 0 and every
-    other window trivially separates from it (a guaranteed false alarm).
-    """
-    rows = []
-    for t in texts:
-        words = t.split()
-        n_words = len(words) or 1
-        oov = sum(1 for w in words if w.lower() not in vocab)
-        non_alpha = sum(1 for c in t if not (c.isalpha() or c.isspace()))
-        rows.append((len(words), len(t),
-                     sum(len(w) for w in words) / n_words,
-                     oov / n_words,
-                     non_alpha / max(len(t), 1)))
-    return pd.DataFrame(rows, columns=list(DESCRIPTOR_COLUMNS))
+# Canonical implementations live in the product (driftguard.textdrift) since the
+# composite absorbed the descriptor-KS layer this benchmark motivated; re-exported
+# here so the harness and its tests keep one source of truth. The vocab handed to
+# the comparators comes from the *training* corpus — never from the reference
+# sample itself (see text_descriptors' docstring for why).
+DESCRIPTOR_COLUMNS = textdrift.DESCRIPTOR_COLUMNS
+reference_vocab = textdrift.reference_vocab
+build_descriptors = textdrift.text_descriptors
 
 
 def detect_driftguard(current_texts: list[str], ctx: dict) -> dict:

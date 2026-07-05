@@ -59,6 +59,39 @@ def test_composite_fires_when_either_signal_fires():
     assert "psi" not in caught["triggered_by"]   # PSI alone would have missed it
 
 
+def test_descriptor_ks_quiet_in_distribution_and_catches_shift():
+    reference, in_dist, semantic = _corpora()
+
+    quiet = textdrift.descriptor_ks_drift(reference, in_dist)
+    assert quiet["drift"] is False
+
+    # Disjoint vocabulary moves oov_rate and word-length descriptors decisively.
+    caught = textdrift.descriptor_ks_drift(reference, semantic)
+    assert caught["drift"] is True
+    assert caught["p_min"] < caught["corrected_alpha"]
+
+
+def test_descriptor_ks_vocab_split_prevents_self_vocab_false_alarm():
+    # The reference sample scored by K-S (odd half) must carry a *nonzero* oov_rate
+    # against the vocab half — the self-vocab degenerate case measured in the
+    # head-to-head protocol. Same-vocab windows then stay in-family.
+    rng = random.Random(1)
+    wide_vocab = [f"w{i}" for i in range(500)]
+    reference = _gen(wide_vocab, 400, rng)   # each half sees ~different token subsets
+    in_dist = _gen(wide_vocab, 250, rng)
+    result = textdrift.descriptor_ks_drift(reference, in_dist)
+    assert result["drift"] is False
+
+
+def test_composite_includes_descriptor_ks_signal():
+    reference, _, semantic = _corpora()
+    ref_dist = drift.build_reference(reference, bins=10)
+    caught = textdrift.composite_drift(semantic, reference, ref_dist)
+    assert "descriptor_ks" in caught["signals"]
+    assert caught["signals"]["descriptor_ks"]["drift"] is True
+    assert "descriptor_ks" in caught["triggered_by"]
+
+
 def test_composite_rule_all_requires_every_signal():
     # With rule="all", the classifier-only semantic catch is NOT declared drift,
     # because PSI abstains. Confirms the combination rule is configurable.
