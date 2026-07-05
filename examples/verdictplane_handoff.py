@@ -1,7 +1,7 @@
 """The DriftGuard -> VerdictPlane handoff, end to end.
 
 Reads a sealed PromotionDecisionRecord (verifying hash, version, and the fail-closed
-derivation), derives the lightweight executor-facing ActionProposal, and prints it —
+derivation), derives the lightweight executor-facing PromotionProposal, and prints it —
 the exact JSON a VerdictPlane-style decision system would receive. The proposal
 carries no authority of its own: it is deterministically recomputable from the record
 it references (``evidence_ref`` pins decision_id + content_hash), so the sealed record
@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import sys
 
-from driftguard.contract import build_action_proposal, parse_record, proposal_to_json
+from driftguard.contract import build_promotion_proposal, parse_record, proposal_to_json
 
 EXIT_BY_ACTION = {"promote_model": 0, "require_human_review": 78, "block_deployment": 1}
 
@@ -32,7 +32,7 @@ def main(argv: list[str]) -> int:
         print(f"INVALID record: {exc}", file=sys.stderr)
         return 2
 
-    proposal = build_action_proposal(record, record_path=argv[0])
+    proposal = build_promotion_proposal(record, record_path=argv[0])
     print(proposal_to_json(proposal))
     return EXIT_BY_ACTION[proposal.action]
 

@@ -42,7 +42,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 SCHEMA_VERSION = "1.1.0"   # 1.1: additive optional fields (risk_level, reason_summary,
-                           # proposed_by) + the ActionProposal companion view.
+                           # proposed_by) + the PromotionProposal companion view.
 
 DECISION_PROMOTE = "promote"
 DECISION_BLOCK = "block"
@@ -52,9 +52,12 @@ RISK_LOW = "low"
 RISK_MEDIUM = "medium"
 RISK_HIGH = "high"
 
-# Deterministic decision -> executor-action mapping for ActionProposal. "rollback_model"
-# is reserved for runtime sources (e.g. a Sentinel-style monitor); a *promotion* record
-# never proposes a rollback.
+# Deterministic decision -> executor-action mapping for PromotionProposal. This is the
+# MODEL-GOVERNANCE intake vocabulary only: runtime remediation (rollbacks, restarts,
+# scaling) belongs to the separate Sentinel->VerdictPlane ActionProposal contract
+# (verdictplane: pilots/wwt/schema/action_proposal.schema.json) — deliberately a
+# different schema with a different name, because a promotion decision is not an
+# incident remediation.
 ACTION_BY_DECISION = {
     DECISION_PROMOTE: "promote_model",
     DECISION_BLOCK: "block_deployment",
@@ -219,7 +222,7 @@ def parse_record(raw: str | dict[str, Any]) -> PromotionDecisionRecord:
 
 
 # --------------------------------------------------------------------------- #
-# ActionProposal: the lightweight executor-facing view of a decision record.
+# PromotionProposal: the lightweight executor-facing view of a decision record.
 # A consumer such as VerdictPlane can act on this alone; the referenced record
 # (decision_id + content_hash) remains the auditable authority.
 # --------------------------------------------------------------------------- #
@@ -228,7 +231,7 @@ PROPOSAL_SCHEMA_VERSION = "1.0.0"
 
 
 @dataclass(frozen=True)
-class ActionProposal:
+class PromotionProposal:
     schema_version: str
     proposal_id: str
     created_at: str                       # ISO 8601 UTC
@@ -241,9 +244,9 @@ class ActionProposal:
     requires_human: bool
 
 
-def build_action_proposal(record: PromotionDecisionRecord,
+def build_promotion_proposal(record: PromotionDecisionRecord,
                           target: dict[str, Any] | None = None,
-                          record_path: str | None = None) -> ActionProposal:
+                          record_path: str | None = None) -> PromotionProposal:
     """Derive the executor-facing proposal from a (verified) decision record.
 
     Everything is mapped deterministically — the proposal can always be recomputed
@@ -254,7 +257,7 @@ def build_action_proposal(record: PromotionDecisionRecord,
                                     "content_hash": record.content_hash}
     if record_path:
         evidence_ref["path"] = record_path
-    return ActionProposal(
+    return PromotionProposal(
         schema_version=PROPOSAL_SCHEMA_VERSION,
         proposal_id=str(uuid.uuid4()),
         created_at=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -268,5 +271,5 @@ def build_action_proposal(record: PromotionDecisionRecord,
     )
 
 
-def proposal_to_json(proposal: ActionProposal, indent: int | None = 2) -> str:
+def proposal_to_json(proposal: PromotionProposal, indent: int | None = 2) -> str:
     return json.dumps(asdict(proposal), indent=indent, ensure_ascii=False)

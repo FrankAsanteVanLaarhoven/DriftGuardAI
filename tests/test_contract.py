@@ -131,10 +131,10 @@ def test_risk_level_is_derived_from_gates_not_asserted():
 
 
 def test_action_proposal_maps_decisions_and_pins_the_record():
-    from driftguard.contract import ACTION_BY_DECISION, build_action_proposal
+    from driftguard.contract import ACTION_BY_DECISION, build_promotion_proposal
 
     record = _record()
-    proposal = build_action_proposal(record, record_path="artifacts/x.json")
+    proposal = build_promotion_proposal(record, record_path="artifacts/x.json")
     assert proposal.action == "require_human_review"
     assert proposal.requires_human is True
     assert proposal.evidence_ref["decision_id"] == record.decision_id
@@ -143,10 +143,10 @@ def test_action_proposal_maps_decisions_and_pins_the_record():
     assert proposal.risk_level == record.risk_level
     assert proposal.target == record.candidate
 
-    auto = build_action_proposal(_record(human_required=False))
+    auto = build_promotion_proposal(_record(human_required=False))
     assert auto.action == "promote_model" and auto.requires_human is False
 
-    blocked = build_action_proposal(_record(gates=_gates(dual_passed=False)))
+    blocked = build_promotion_proposal(_record(gates=_gates(dual_passed=False)))
     assert blocked.action == "block_deployment" and blocked.risk_level == contract.RISK_HIGH
     # Every decision has a defined action — no gaps for a consumer to hit.
     assert set(ACTION_BY_DECISION) == {contract.DECISION_PROMOTE, contract.DECISION_BLOCK,

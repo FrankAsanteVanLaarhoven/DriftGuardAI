@@ -74,7 +74,7 @@ Tests: [`tests/test_contract.py`](../tests/test_contract.py)
    condenses the gate reasons. They exist for triage and logs; a consumer that acts
    on them without honouring rule 1 is out of contract. (There is deliberately **no**
    `action` field on the record — an assertable action that could disagree with the
-   derived `decision` would undo rule 1. Actions live on the `ActionProposal` view.)
+   derived `decision` would undo rule 1. Actions live on the `PromotionProposal` view.)
 
 ## Research grounding
 
@@ -124,11 +124,11 @@ identical verdicts and reject identical tampering.
 uv run python examples/consume_decision.py artifacts/promotion_decision.json
 ```
 
-## ActionProposal — the executor-facing view (v1.0.0)
+## PromotionProposal — the executor-facing view (v1.0.0)
 
 A decision system like VerdictPlane does not need the full record to *route* work; it
 needs what to do, to what, at what risk, and where the proof lives.
-`build_action_proposal(record)` derives exactly that:
+`build_promotion_proposal(record)` derives exactly that:
 
 ```jsonc
 {
@@ -151,9 +151,13 @@ Properties, by design:
   table; risk and reason are the record's derived fields), so a proposal is always
   recomputable from its record. `evidence_ref` pins the sealed record; a consumer that
   wants proof follows the reference and runs the three record checks.
-- **`rollback_model` is reserved** for runtime sources (a Sentinel-style monitor
-  proposing rollback of a live model) — a *promotion* record never maps to it, but the
-  action vocabulary is shared so one VerdictPlane inbox can serve both producers.
+- **Two intakes, deliberately.** VerdictPlane's WWT pilot defines its own
+  `ActionProposal` (adopted verbatim from Sentinel: incident-centric — `incident`,
+  `root_service`, `evidence_grounding`, runtime-remediation actions like
+  `rollback_change`/`restart_service`). A model-promotion decision does not fit those
+  semantics, so DriftGuard's intake is this **differently-named, domain-specific**
+  `PromotionProposal` — no field abuse, no schema collision, and VerdictPlane routes
+  the two by name.
 - [`examples/verdictplane_handoff.py`](../examples/verdictplane_handoff.py) is the
   end-to-end handoff: verify record → derive proposal → emit JSON, with the same
   CI-friendly exit codes as the reference consumer.
