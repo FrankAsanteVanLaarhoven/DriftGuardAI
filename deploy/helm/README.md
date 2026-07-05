@@ -72,3 +72,32 @@ helm template dg deploy/helm/driftguard -n driftguard --set canary.enabled=true 
 `tests/test_helm.py` runs both (skipped when helm isn't installed) and asserts the
 rendered chart preserves the fallback-contract probes and the guard's least-privilege
 RBAC.
+
+## Measured rollback drill (kind, 2026-07-05)
+
+The full loop was exercised on a kind cluster: chart installed with the canary open
+(1 canary / 2 stable, plain Prometheus scraping at 15 s), the canary's candidate made
+unloadable (`DRIFTGUARD_PRIMARY_MODEL_URI` pointing at an unreachable MLflow **and**
+`DRIFTGUARD_PRIMARY_POINTER_PATH` at a nonexistent file), an in-cluster probe hitting
+`/predict` once per second throughout.
+
+| event | time (UTC) |
+|---|---|
+| broken-canary release rolled | 02:21:34 |
+| canary Ready — degraded to in-pod baseline, serving 200s | ~02:21:55 |
+| breach first observable in Prometheus (`driftguard_model_tier{tier="baseline"}` on a canary pod) | 02:22:10 |
+| guard scaled canary to 0 + audit annotation (`driftguard.io/rolled-back-at`) | 02:23:00 |
+
+**Breach-visible → rollback: 50 s. Release → rollback: 86 s** — against a 5-minute
+budget, using only the chart's defaults (per-minute guard, 15 s scrape). The traffic
+probe recorded **1248/1248 HTTP 200** across the broken deploy and rollback: the
+degraded canary answered every request from its in-pod baseline until the guard removed
+it, and subsequent guard runs are no-ops ("canary already at 0 replicas").
+
+The drill also caught a real bug before it produced that number: the first attempt
+CrashLooped **every** pod because the MLflow client retries an unreachable registry
+with minutes of exponential backoff *during startup*, blowing the startup-probe budget —
+a platform-level defeat of the fallback contract that a missing-file chaos test can't
+see. The fix (`primary_load_timeout_s`, default 20 s, in `driftguard.registry`) bounds
+any registry hang and degrades to baseline; it ships with its own chaos test
+(`test_hanging_registry_degrades_within_deadline`).

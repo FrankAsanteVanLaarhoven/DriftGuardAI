@@ -54,6 +54,12 @@ class Settings(BaseSettings):
     # pointer file. Empty (the local/dev default) uses the pointer only, which keeps
     # the demo and fallback test hermetic. Production sets this via env.
     primary_model_uri: str = ""
+    # Hard deadline on resolving the primary from the registry at (re)load time.
+    # A hanging registry (DNS blackhole, network partition) must degrade the service
+    # to baseline within seconds — not block startup until the platform kills the pod.
+    # Measured in the kind canary drill: unbounded MLflow retries exceed any sane
+    # startup-probe budget and turn a fallback-contract degrade into a CrashLoop.
+    primary_load_timeout_s: float = 20.0
 
     # Promotion / baseline gate
     promotion_margin: float = 0.0  # candidate macro-F1 must beat baseline by >= this

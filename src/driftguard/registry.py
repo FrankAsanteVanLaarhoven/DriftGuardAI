@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -265,24 +267,63 @@ def load_baseline(settings: Settings | None = None) -> dict[str, Any]:
     return bundle
 
 
+def _call_with_deadline(fn: Callable[[], Any], timeout_s: float, what: str) -> Any:
+    """Run ``fn`` in a daemon thread and give up after ``timeout_s`` seconds.
+
+    The MLflow client retries an unreachable registry with long exponential
+    backoff; without a deadline that blocks service startup until the platform's
+    startup probe kills the pod — a CrashLoop where the fallback contract demands
+    a degrade-to-baseline. The abandoned thread is a daemon: it finishes (or dies
+    with the process) without holding anything up.
+    """
+    result: dict[str, Any] = {}
+
+    def _target() -> None:
+        try:
+            result["value"] = fn()
+        except Exception as exc:  # noqa: BLE001 - surfaced to the caller below
+            result["error"] = exc
+
+    t = threading.Thread(target=_target, daemon=True, name="driftguard-primary-loader")
+    t.start()
+    t.join(timeout_s)
+    if t.is_alive():
+        raise TimeoutError(f"{what} exceeded the {timeout_s:.0f}s load deadline")
+    if "error" in result:
+        raise result["error"]
+    return result["value"]
+
+
+def _load_mlflow_bundle(uri: str, settings: Settings) -> dict[str, Any]:
+    """The blocking MLflow fetch, isolated so the deadline wrapper (and tests)
+    can own its runtime behaviour."""
+    import mlflow
+    import mlflow.sklearn
+
+    mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
+    pipe = mlflow.sklearn.load_model(uri)
+    return make_bundle(pipe, "primary", {}, version=uri)
+
+
 def load_primary(settings: Settings | None = None) -> tuple[dict[str, Any] | None, str | None]:
     """Best-effort primary load. Returns (bundle, source) or (None, None).
 
     Order: MLflow registry (if a ``models:/`` URI is configured and reachable),
     otherwise the local pointer file (``models/primary_pointer`` → a joblib path).
-    Any failure is swallowed and reported so the service can degrade to baseline.
+    Any failure — including a registry that *hangs* rather than fails — is bounded
+    by ``primary_load_timeout_s``, swallowed, and reported so the service degrades
+    to baseline instead of blocking startup.
     """
     settings = settings or get_settings()
     uri = settings.primary_model_uri.strip()
 
     if uri.startswith("models:/"):
         try:
-            import mlflow
-            import mlflow.sklearn
-
-            mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
-            pipe = mlflow.sklearn.load_model(uri)
-            bundle = make_bundle(pipe, "primary", {}, version=uri)
+            bundle = _call_with_deadline(
+                lambda: _load_mlflow_bundle(uri, settings),
+                settings.primary_load_timeout_s,
+                f"primary load from MLflow ({uri})",
+            )
             if canary_selftest(bundle):
                 return bundle, f"mlflow:{uri}"
             log.warning("Primary from %s failed canary self-test.", uri)

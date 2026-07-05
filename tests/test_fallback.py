@@ -43,6 +43,38 @@ def test_missing_primary_still_serves_baseline():
         assert _tier_gauge("baseline") == 1.0
 
 
+def test_hanging_registry_degrades_within_deadline(monkeypatch):
+    """A registry that HANGS (DNS blackhole / partition) must not block startup.
+
+    Found in the kind canary drill: MLflow's client retries an unreachable
+    registry with minutes of backoff, blowing the startup-probe budget and
+    turning a contract degrade into a CrashLoop. The deadline bounds it.
+    """
+    import time
+
+    from driftguard import registry
+
+    def _hang_forever(uri, settings):
+        time.sleep(60)
+
+    monkeypatch.setattr(registry, "_load_mlflow_bundle", _hang_forever)
+    settings = Settings(
+        baseline_path=_baseline_path(),
+        primary_model_uri="models:/driftguard@staging",
+        primary_load_timeout_s=0.3,
+        primary_pointer_path=Path("/nonexistent/primary_pointer"),
+    )
+    t0 = time.perf_counter()
+    with TestClient(build_app(settings)) as client:
+        startup_s = time.perf_counter() - t0
+        assert startup_s < 5.0                                  # bounded, not minutes
+        assert client.get("/ready").status_code == 200          # never out of rotation
+        r = client.post("/predict", json={"text": "Markets rallied on rate cut hopes."})
+        assert r.status_code == 200                             # contract holds
+        assert r.json()["served_by"] == "baseline"
+        assert _tier_gauge("baseline") == 1.0
+
+
 def test_corrupt_primary_fails_canary_and_falls_back(tmp_path):
     corrupt = tmp_path / "primary.joblib"
     corrupt.write_bytes(b"this is not a valid joblib payload")

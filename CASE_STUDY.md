@@ -57,7 +57,27 @@ Measured against the running service and in the test suite:
   serves.
 - A **zero latency budget** forces every primary call over budget → baseline serves,
   `driftguard_primary_latency_breach_total` increments.
+- A **hanging model registry** (DNS blackhole to MLflow) is bounded by the
+  `primary_load_timeout_s` deadline (20 s default) → startup completes degraded on the
+  baseline instead of blocking. Found the hard way: the kind canary drill (below) showed
+  the MLflow client's minutes-long retry backoff blowing the startup-probe budget and
+  CrashLooping every pod — an outage the in-process fallback could never see. Now a
+  chaos test (`test_hanging_registry_degrades_within_deadline`).
 - Primary predict latency on CPU (local): sub-3 ms per request (0.7–2.8 ms observed).
+
+### Canary auto-rollback drill (kind, measured 2026-07-05)
+
+Deployed via the Helm chart on a kind cluster (Prometheus scraping at 15 s, guard
+CronJob every minute), with the canary's candidate made unloadable — see
+`deploy/helm/README.md` for the mechanism and full timeline:
+
+- Broken-canary release rolled at 02:21:34Z → canary Ready but **degraded to its
+  in-pod baseline** (every request it served stayed HTTP 200).
+- Breach first observable in Prometheus 02:22:10Z → guard **scaled the canary to 0 at
+  02:23:00Z** with an audit annotation: **50 s from breach-visible to rollback**,
+  86 s including the entire broken deploy.
+- In-cluster traffic probe (1 req/s): **1248/1248 HTTP 200** from the moment the fixed
+  image rolled, with zero non-200 through the broken-canary deploy and rollback.
 
 **Test suite: 16 passed** — unit + integration + **5 fallback/chaos tests**.
 
