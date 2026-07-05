@@ -153,6 +153,27 @@ def test_action_proposal_maps_decisions_and_pins_the_record():
                                        contract.DECISION_HOLD_FOR_HUMAN}
 
 
+def test_governed_action_shape_for_verdictplane():
+    """The adapter emits exactly the plain-dict shape VerdictPlane's govern()/Action
+    accepts (tool/effect/args/agent/context), with policy-matchable dotted paths."""
+    from driftguard.contract import build_promotion_proposal, proposal_to_governed_action
+
+    proposal = build_promotion_proposal(_record(), record_path="artifacts/x.json")
+    action = proposal_to_governed_action(proposal)
+    assert set(action) == {"tool", "effect", "args", "agent", "context"}
+    assert action["tool"] == "require_human_review"
+    assert action["effect"] == "write"
+    assert action["agent"] == "driftguard"
+    # The fields a pilot policy keys on, addressable as args.<dotted-path>:
+    assert action["args"]["risk_level"] == proposal.risk_level
+    assert action["args"]["requires_human"] is True
+    assert action["args"]["evidence_ref"]["content_hash"] == _record().content_hash or \
+        "content_hash" in action["args"]["evidence_ref"]
+    assert action["args"]["proposal_id"] == proposal.proposal_id
+    # JSON-serializable end to end (the ledger stores plain JSON records).
+    json.dumps(action)
+
+
 def test_stdlib_reference_consumer_agrees_with_the_library():
     consumer = _consumer()
     payload = json.loads(contract.to_json(_record()))

@@ -75,6 +75,61 @@ VerdictPlane's policy configuration for the model-governance intake, not in this
 schema — a promotion's blast radius is a property of the serving deployment, which
 VerdictPlane knows and DriftGuard does not.
 
+## Library integration (VerdictPlane as a library, not a service)
+
+VerdictPlane is an in-process library + CLI; its one choke point is
+`verdictplane.interceptor.govern(action, call, *, policy, ledger, gate)` with a tiny
+generic `Action` boundary model (`tool/effect/args/agent/context`). Verified against
+its source — three design decisions follow:
+
+1. **Adapter, not a native proposal type.** VerdictPlane's enforcement path stays
+   generic and DriftGuard-ignorant. DriftGuard ships the adapter:
+   `contract.proposal_to_governed_action(proposal)` emits the plain action dict
+   `govern()` validates — **zero verdictplane imports on our side, zero driftguard
+   imports on theirs**. The pilot glue is a few lines:
+
+   ```python
+   from verdictplane.gate import Gate
+   from verdictplane.interceptor import govern
+   from verdictplane.policy import load_policy
+   from verdictplane.provenance import Ledger
+
+   # steps 1–3 of the validation contract first (verify record + cross-check), then:
+   action = proposal_to_governed_action(proposal)          # from driftguard.contract
+   govern(action, execute_promotion,                        # side effect runs only if allowed
+          policy=load_policy("pilots/wwt/policies/model_governance.yaml"),
+          ledger=Ledger("artifacts/ledger"), gate=Gate("artifacts/gate"))
+   ```
+
+   `govern()` gives the pilot everything the 5-step contract's steps 4–5 asked for,
+   natively: default-`require_human` policy, hash-chained ledger records before/after
+   the side effect, and `PolicyDenied`/`ApprovalDenied` fail-closed exceptions.
+
+2. **Human approval: use the real Gate + CLI, no simulator.** The `Gate` is a
+   file-backed, cross-process approval queue (quorum votes, deny vetoes, timeout ⇒
+   denied — fail-safe). A blocked `govern()` in the pilot process resolves the moment
+   a reviewer runs the real `verdictplane` CLI (`pending` / `approve` / `deny`) in
+   another terminal. That *is* the demo, and it's real.
+
+3. **Policy: pilot-owned, first-match, default-deny.** A starting policy for this
+   intake (dotted paths into the adapter's `args`):
+
+   ```yaml
+   default: require_human
+   rules:
+     - match: {tool: promote_model, args.risk_level: low, args.requires_human: false}
+       decision: allow
+     - match: {tool: promote_model, args.risk_level: high}
+       decision: deny
+     - match: {tool: block_deployment}
+       decision: deny          # the producer already refused; record it as blocked
+   ```
+
+   Note the layering: DriftGuard's `requires_human` is an **input** to policy, not a
+   decision — the governor may escalate an auto-promote to its human gate (producer
+   proposes, governor disposes). Unmatched actions — including any future DriftGuard
+   action this policy has never heard of — fall to `require_human` by default.
+
 ## Acceptance check ("consumed one proposal" — the merge criterion)
 
 The `feature/wwt-pilot` branch merges to DriftGuard `main` when VerdictPlane's intake:

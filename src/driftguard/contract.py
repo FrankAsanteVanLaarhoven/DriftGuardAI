@@ -273,3 +273,32 @@ def build_promotion_proposal(record: PromotionDecisionRecord,
 
 def proposal_to_json(proposal: PromotionProposal, indent: int | None = 2) -> str:
     return json.dumps(asdict(proposal), indent=indent, ensure_ascii=False)
+
+
+def proposal_to_governed_action(proposal: PromotionProposal) -> dict[str, Any]:
+    """Shape a proposal as the plain action dict VerdictPlane's ``govern()`` takes.
+
+    Deliberately emits a **plain dict** (VerdictPlane validates it against its own
+    generic ``Action`` model: tool/effect/args/agent/context) so neither project
+    imports the other. The governance-relevant fields land under ``args`` where
+    VerdictPlane's policy engine matches them as dotted paths — e.g.
+    ``match: {tool: promote_model, args.risk_level: low}``. The producer's
+    ``requires_human`` is carried as an *input* to policy, not a decision: the
+    governor may still escalate an auto-promote to its human gate (producer
+    proposes, governor disposes).
+    """
+    return {
+        "tool": proposal.action,
+        "effect": "write",
+        "args": {
+            "target": proposal.target,
+            "risk_level": proposal.risk_level,
+            "requires_human": proposal.requires_human,
+            "reason": proposal.reason,
+            "proposal_id": proposal.proposal_id,
+            "evidence_ref": proposal.evidence_ref,
+        },
+        "agent": proposal.source,
+        "context": {"proposal_schema_version": proposal.schema_version,
+                    "created_at": proposal.created_at},
+    }
