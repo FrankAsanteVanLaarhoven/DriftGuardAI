@@ -41,11 +41,25 @@ from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
-SCHEMA_VERSION = "1.0.0"
+SCHEMA_VERSION = "1.1.0"   # 1.1: additive optional fields (risk_level, reason_summary,
+                           # proposed_by) + the ActionProposal companion view.
 
 DECISION_PROMOTE = "promote"
 DECISION_BLOCK = "block"
 DECISION_HOLD_FOR_HUMAN = "hold_for_human"
+
+RISK_LOW = "low"
+RISK_MEDIUM = "medium"
+RISK_HIGH = "high"
+
+# Deterministic decision -> executor-action mapping for ActionProposal. "rollback_model"
+# is reserved for runtime sources (e.g. a Sentinel-style monitor); a *promotion* record
+# never proposes a rollback.
+ACTION_BY_DECISION = {
+    DECISION_PROMOTE: "promote_model",
+    DECISION_BLOCK: "block_deployment",
+    DECISION_HOLD_FOR_HUMAN: "require_human_review",
+}
 
 
 @dataclass(frozen=True)
@@ -73,6 +87,11 @@ class PromotionDecisionRecord:
     policy: dict[str, Any]               # required gate names, human_required, floors
     evidence: dict[str, Any]             # artifact pointers / digests
     framework: dict[str, Any]            # producing framework + version
+    # --- 1.1 additive convenience fields. The GATES remain authoritative: these are
+    # --- derived summaries for quick triage/logging, never a substitute for rule 1.
+    risk_level: str | None = None        # derived by derive_risk_level (low|medium|high)
+    reason_summary: str | None = None    # one-line human-readable summary
+    proposed_by: str = "driftguard"
     content_hash: str = ""               # sha256 over canonical JSON (hash field empty)
 
 
@@ -84,6 +103,34 @@ def derive_decision(gates: list[GateOutcome], human_required: bool = True) -> st
     if not required or any(not g.passed for g in required):
         return DECISION_BLOCK
     return DECISION_HOLD_FOR_HUMAN if human_required else DECISION_PROMOTE
+
+
+def derive_risk_level(gates: list[GateOutcome]) -> str:
+    """Deterministic risk summary from gate outcomes (the gates stay authoritative).
+
+    Any failed required gate ⇒ ``high`` (shipping it would be a fail-closed override).
+    Otherwise the advisory failures grade the *accepted residual risk* of a pass:
+    none ⇒ ``low``; one ⇒ ``medium``; two or more ⇒ ``high``.
+    """
+    if any(g.required and not g.passed for g in gates) or not any(g.required for g in gates):
+        return RISK_HIGH
+    advisory_failures = sum(1 for g in gates if not g.required and not g.passed)
+    if advisory_failures == 0:
+        return RISK_LOW
+    return RISK_MEDIUM if advisory_failures == 1 else RISK_HIGH
+
+
+def summarize_reason(gates: list[GateOutcome], decision: str) -> str:
+    """One-line, log-friendly summary; the full reasons stay on the gates."""
+    required = [g for g in gates if g.required]
+    failed_required = [g.name for g in required if not g.passed]
+    advisory_failed = [g.name for g in gates if not g.required and not g.passed]
+    if failed_required:
+        return f"{decision}: required gate(s) failed: {', '.join(failed_required)}"
+    head = f"{decision}: {len(required)}/{len(required)} required gate(s) passed"
+    if advisory_failed:
+        return f"{head}; advisory failures: {', '.join(advisory_failed)}"
+    return f"{head}; no advisory failures"
 
 
 def _canonical_json(payload: dict[str, Any]) -> str:
@@ -109,11 +156,12 @@ def build_record(*, candidate: dict[str, Any], incumbent: dict[str, Any],
     policy = dict(policy or {})
     policy.setdefault("required_gates", [g.name for g in gates if g.required])
     policy.setdefault("human_required", human_required)
+    decision = derive_decision(gates, human_required)
     payload = {
         "schema_version": SCHEMA_VERSION,
         "decision_id": str(uuid.uuid4()),
         "decided_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "decision": derive_decision(gates, human_required),
+        "decision": decision,
         "candidate": candidate,
         "incumbent": incumbent,
         "baseline": baseline,
@@ -122,6 +170,9 @@ def build_record(*, candidate: dict[str, Any], incumbent: dict[str, Any],
         "policy": policy,
         "evidence": evidence or {},
         "framework": {"name": "driftguard", "version": fw_version},
+        "risk_level": derive_risk_level(gates),
+        "reason_summary": summarize_reason(gates, decision),
+        "proposed_by": "driftguard",
         "content_hash": "",
     }
     payload["content_hash"] = _hashed(payload)
@@ -165,3 +216,57 @@ def parse_record(raw: str | dict[str, Any]) -> PromotionDecisionRecord:
         raise ValueError(f"decision '{record.decision}' inconsistent with gates "
                          f"(fail-closed derivation gives '{derived}')")
     return record
+
+
+# --------------------------------------------------------------------------- #
+# ActionProposal: the lightweight executor-facing view of a decision record.
+# A consumer such as VerdictPlane can act on this alone; the referenced record
+# (decision_id + content_hash) remains the auditable authority.
+# --------------------------------------------------------------------------- #
+
+PROPOSAL_SCHEMA_VERSION = "1.0.0"
+
+
+@dataclass(frozen=True)
+class ActionProposal:
+    schema_version: str
+    proposal_id: str
+    created_at: str                       # ISO 8601 UTC
+    source: str                           # "driftguard" (runtime monitors may differ)
+    action: str                           # promote_model | block_deployment | require_human_review
+    target: dict[str, Any]                # what to act on (model identity/alias)
+    risk_level: str
+    reason: str
+    evidence_ref: dict[str, Any]          # decision_id + content_hash (+ optional path)
+    requires_human: bool
+
+
+def build_action_proposal(record: PromotionDecisionRecord,
+                          target: dict[str, Any] | None = None,
+                          record_path: str | None = None) -> ActionProposal:
+    """Derive the executor-facing proposal from a (verified) decision record.
+
+    Everything is mapped deterministically — the proposal can always be recomputed
+    from the record, so it carries no authority of its own; ``evidence_ref`` pins the
+    sealed record it came from.
+    """
+    evidence_ref: dict[str, Any] = {"decision_id": record.decision_id,
+                                    "content_hash": record.content_hash}
+    if record_path:
+        evidence_ref["path"] = record_path
+    return ActionProposal(
+        schema_version=PROPOSAL_SCHEMA_VERSION,
+        proposal_id=str(uuid.uuid4()),
+        created_at=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        source=record.proposed_by or "driftguard",
+        action=ACTION_BY_DECISION[record.decision],
+        target=target if target is not None else dict(record.candidate),
+        risk_level=record.risk_level or derive_risk_level(record.gates),
+        reason=record.reason_summary or summarize_reason(record.gates, record.decision),
+        evidence_ref=evidence_ref,
+        requires_human=record.decision != DECISION_PROMOTE,
+    )
+
+
+def proposal_to_json(proposal: ActionProposal, indent: int | None = 2) -> str:
+    return json.dumps(asdict(proposal), indent=indent, ensure_ascii=False)
