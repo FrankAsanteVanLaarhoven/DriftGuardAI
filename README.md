@@ -119,6 +119,9 @@ companion to the production service in this repo.
 - `docs/DETECTORS.md` — **the pluggable drift-detector interface** (PSI / domain-classifier /
   descriptor-KS / composite), reused across text, tabular, and embeddings with no new
   detector code.
+- `docs/PROMOTION_DECISION.md` — **the versioned promotion-decision wire contract**
+  (`PromotionDecisionRecord` v1.0.0): fail-closed derived decisions, human gate as a
+  first-class outcome, advisory risk report, tamper-evident audit hash.
 - `examples/` — **reference instances** proving the framework generalises: a **tabular**
   model on OpenML Adult (`make example-tabular`) and an **embedding** model on 20 Newsgroups
   (`make example-embedding`) reuse the same gates, metrics, and detectors as text — three

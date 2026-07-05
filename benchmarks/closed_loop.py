@@ -34,7 +34,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from sklearn.metrics import f1_score  # noqa: E402
 
-from driftguard import drift, registry, textdrift  # noqa: E402
+from driftguard import contract, drift, registry, textdrift  # noqa: E402
 from driftguard.config import get_settings  # noqa: E402
 from driftguard.data import load_split  # noqa: E402
 
@@ -157,6 +157,53 @@ def run(p: float = 0.7, window: int = 600, seed: int = 42,
     cgate_fixed = calibration_gate(ece["cand_fixed"], ece["stale_fixed"])
     cgate_drift = calibration_gate(ece["cand_drift"], ece["stale_drift"])
 
+    # --- 6. seal the run as a versioned PromotionDecisionRecord ----------------
+    # The dual gate is the required (deciding) gate, per the repo's promotion flow;
+    # slice + calibration verdicts ride along as the advisory risk report. The human
+    # gate stays first-class: a passing candidate is HELD, never auto-promoted here.
+    record = contract.build_record(
+        candidate={"kind": "retrained_candidate", "algo": "tfidf+logreg",
+                   "trained_on": f"drifted corpus (vocab drift p={p})",
+                   "seed": seed, "train_sample": train_sample},
+        incumbent={"kind": "stale_primary", "macro_f1_fixed": round(stale_fixed_f1, 4)},
+        baseline={"kind": "committed_baseline", "macro_f1_fixed": round(base_fixed_f1, 4)},
+        gates=[
+            contract.GateOutcome("dual_drift_aware", gate_dual.passed, True,
+                                 gate_dual.reason,
+                                 {"margin": settings.promotion_margin,
+                                  "regression_floor": settings.gate_regression_floor}),
+            contract.GateOutcome("baseline_fixed", gate_fixed.passed, False,
+                                 gate_fixed.reason, {}),
+            contract.GateOutcome("baseline_refreshed", gate_refreshed.passed, False,
+                                 gate_refreshed.reason, {}),
+            contract.GateOutcome("slice_fixed", sgate_fixed.passed, False,
+                                 sgate_fixed.reason,
+                                 {"regression_floor": settings.gate_regression_floor}),
+            contract.GateOutcome("slice_drifted", sgate_drift.passed, False,
+                                 sgate_drift.reason,
+                                 {"regression_floor": settings.gate_regression_floor}),
+            contract.GateOutcome("calibration_fixed", cgate_fixed.passed, False,
+                                 cgate_fixed.reason, {"tolerance": cgate_fixed.tolerance}),
+            contract.GateOutcome("calibration_drifted", cgate_drift.passed, False,
+                                 cgate_drift.reason, {"tolerance": cgate_drift.tolerance}),
+        ],
+        signals={
+            "macro_f1": {"stale_on_drift": round(stale_drift_f1, 4),
+                         "candidate_on_drift": round(cand_drift_f1, 4),
+                         "stale_on_fixed": round(stale_fixed_f1, 4),
+                         "candidate_on_fixed": round(cand_fixed_f1, 4)},
+            "recovery_ratio": round(rec_ratio, 4),
+            "retention_ratio": round(ret_ratio, 4),
+            "slices_fixed": {k: round(v, 4) for k, v in cand_slices_fixed.items()},
+            "calibration_ece": ece,
+            "drift_detection": {"detected": det["drift"],
+                                "triggered_by": det["triggered_by"]},
+        },
+        evidence={"results": "benchmarks/results_recovery.json",
+                  "scenario": f"vocab_concept_drift(p={p})"},
+        human_required=True,
+    )
+
     return {
         "scenario": f"vocab_concept_drift(p={p})",
         "detected": det["drift"],
@@ -211,6 +258,7 @@ def run(p: float = 0.7, window: int = 600, seed: int = 42,
             "gate_fixed": {"passed": cgate_fixed.passed, "reason": cgate_fixed.reason},
             "gate_drifted": {"passed": cgate_drift.passed, "reason": cgate_drift.reason},
         },
+        "promotion_decision_record": json.loads(contract.to_json(record)),
     }
 
 
@@ -394,8 +442,16 @@ def main(argv: list[str] | None = None) -> int:
                  safety_retention_floor=args.safety_retention_floor)
     out = here / "results_recovery.json"
     out.write_text(json.dumps(result, indent=2))
+    record = result["promotion_decision_record"]
+    record_out = here / "results_promotion_decision.json"
+    record_out.write_text(json.dumps(record, indent=2))
     print(to_markdown(result))
-    print(f"\nWrote {out}")
+    n_req = sum(1 for g in record["gates"] if g["required"])
+    n_adv_fail = sum(1 for g in record["gates"] if not g["required"] and not g["passed"])
+    print(f"\nPromotionDecisionRecord v{record['schema_version']}: "
+          f"decision={record['decision']} ({n_req} required gate(s), "
+          f"{n_adv_fail} advisory FAIL in the risk report) -> {record_out.name}")
+    print(f"Wrote {out}")
     return 0
 
 

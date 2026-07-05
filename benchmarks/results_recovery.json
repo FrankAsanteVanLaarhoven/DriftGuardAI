@@ -8,13 +8,13 @@
   "domain_auc": 1.0,
   "psi": 0.014208340177638378,
   "timing_s": {
-    "detection": 0.262,
-    "retrain": 23.51,
-    "evaluate": 0.739,
-    "detection_to_decision": 23.772
+    "detection": 0.264,
+    "retrain": 26.042,
+    "evaluate": 0.723,
+    "detection_to_decision": 26.306
   },
   "recovery": {
-    "time_to_recovery_s": 24.511,
+    "time_to_recovery_s": 27.03,
     "recovery_ratio": 0.9682,
     "retention_ratio": 0.9262,
     "orig_clean_macro_f1": 0.9197
@@ -101,5 +101,132 @@
       "passed": true,
       "reason": "candidate ECE 0.0197 <= incumbent 0.0361 + tolerance 0.0200"
     }
+  },
+  "promotion_decision_record": {
+    "schema_version": "1.0.0",
+    "decision_id": "3d856038-1616-4c3e-97c7-a97112a7ba3f",
+    "decided_at": "2026-07-05T03:08:47Z",
+    "decision": "hold_for_human",
+    "candidate": {
+      "kind": "retrained_candidate",
+      "algo": "tfidf+logreg",
+      "trained_on": "drifted corpus (vocab drift p=0.7)",
+      "seed": 42,
+      "train_sample": null
+    },
+    "incumbent": {
+      "kind": "stale_primary",
+      "macro_f1_fixed": 0.9197
+    },
+    "baseline": {
+      "kind": "committed_baseline",
+      "macro_f1_fixed": 0.8956
+    },
+    "gates": [
+      {
+        "name": "dual_drift_aware",
+        "passed": true,
+        "required": true,
+        "reason": "refreshed 0.9170 >= 0.7993+0.0000; fixed-floor 0.8519 >= 0.8456 (baseline 0.8956 - floor 0.0500)",
+        "params": {
+          "margin": 0.0,
+          "regression_floor": 0.05
+        }
+      },
+      {
+        "name": "baseline_fixed",
+        "passed": false,
+        "required": false,
+        "reason": "candidate macro-F1 0.8519 < baseline 0.8956 + margin 0.0000 (= 0.8956)",
+        "params": {}
+      },
+      {
+        "name": "baseline_refreshed",
+        "passed": true,
+        "required": false,
+        "reason": "candidate macro-F1 0.9170 >= baseline 0.7993 + margin 0.0000 (= 0.7993)",
+        "params": {}
+      },
+      {
+        "name": "slice_fixed",
+        "passed": false,
+        "required": false,
+        "reason": "worst slice 'Sci/Tech' delta -0.0849 < -floor (-0.0500)",
+        "params": {
+          "regression_floor": 0.05
+        }
+      },
+      {
+        "name": "slice_drifted",
+        "passed": true,
+        "required": false,
+        "reason": "worst slice 'Sports' delta +0.0738 >= -floor (-0.0500)",
+        "params": {
+          "regression_floor": 0.05
+        }
+      },
+      {
+        "name": "calibration_fixed",
+        "passed": false,
+        "required": false,
+        "reason": "candidate ECE 0.0697 > incumbent 0.0187 + tolerance 0.0200",
+        "params": {
+          "tolerance": 0.02
+        }
+      },
+      {
+        "name": "calibration_drifted",
+        "passed": true,
+        "required": false,
+        "reason": "candidate ECE 0.0197 <= incumbent 0.0361 + tolerance 0.0200",
+        "params": {
+          "tolerance": 0.02
+        }
+      }
+    ],
+    "signals": {
+      "macro_f1": {
+        "stale_on_drift": 0.8344,
+        "candidate_on_drift": 0.917,
+        "stale_on_fixed": 0.9197,
+        "candidate_on_fixed": 0.8519
+      },
+      "recovery_ratio": 0.9682,
+      "retention_ratio": 0.9262,
+      "slices_fixed": {
+        "World": 0.8597,
+        "Sports": 0.9247,
+        "Business": 0.8084,
+        "Sci/Tech": 0.8147
+      },
+      "calibration_ece": {
+        "stale_fixed": 0.0187,
+        "cand_fixed": 0.0697,
+        "stale_drift": 0.0361,
+        "cand_drift": 0.0197
+      },
+      "drift_detection": {
+        "detected": true,
+        "triggered_by": [
+          "domain_classifier",
+          "descriptor_ks"
+        ]
+      }
+    },
+    "policy": {
+      "required_gates": [
+        "dual_drift_aware"
+      ],
+      "human_required": true
+    },
+    "evidence": {
+      "results": "benchmarks/results_recovery.json",
+      "scenario": "vocab_concept_drift(p=0.7)"
+    },
+    "framework": {
+      "name": "driftguard",
+      "version": "0.1.0"
+    },
+    "content_hash": "a16ad56c7a331be096f31c9448cd19c1f875d35bebe2658d987cdbcf06252f8c"
   }
 }

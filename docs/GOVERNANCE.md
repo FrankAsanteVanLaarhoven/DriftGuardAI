@@ -63,6 +63,11 @@ calibrated than the stale model on the new distribution (0.020 vs 0.036). The
 aggregate gate answers "may it ship?"; the slice/calibration report is the risk
 statement of what shipping it means.
 
+Every decision can be exported as a **versioned, tamper-evident
+`PromotionDecisionRecord`** — required gates drive a fail-closed derived decision,
+advisory gates ride along as the risk report, and the human gate is a first-class
+outcome. See [`PROMOTION_DECISION.md`](PROMOTION_DECISION.md).
+
 ## 3. The measured trade-off
 
 The reference implementation exercises the framework under controlled concept drift
