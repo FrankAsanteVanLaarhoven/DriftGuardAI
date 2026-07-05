@@ -77,16 +77,49 @@ provenance/reporting ethos of Model Cards (Mitchell et al. 2019). The contract's
 is to carry those measurements to the decision boundary intact — not to invent new
 metrics at serialization time.
 
+## Producing it
+
+The real pipeline emits records, not just the benchmark: `make train` (and the drift
+retrain path, which reuses the same entrypoint) seals every promotion decision to
+`artifacts/promotion_decision.json` (`emit_decision_record` in `driftguard.train`;
+disable with `DRIFTGUARD_EMIT_DECISION_RECORD=false`). The decision mirrors the
+pipeline's real behaviour: with `auto_promote` on, a gate-passing candidate records
+`promote`; the drift pipeline runs with it off and records `hold_for_human`. Candidate
+slice scores and calibration ride along as signals; the evidence block carries SHA-256
+digests of the metric files the gate read.
+
 ## Consuming it (e.g. VerdictPlane, CI, a controller)
+
+Python consumers can use the library:
 
 ```python
 from driftguard.contract import parse_record
 
-record = parse_record(open("results_promotion_decision.json").read())  # verifies
+record = parse_record(open("artifacts/promotion_decision.json").read())  # verifies
 if record.decision == "hold_for_human":
     advisory_failures = [g for g in record.gates if not g.required and not g.passed]
     # -> surface record.signals + advisory_failures to the approver, then execute
 ```
 
-A consumer that only speaks JSON needs three checks: schema major == 1, content hash
-verifies, decision matches the fail-closed derivation. Everything else is data.
+But no consumer *needs* the library. A consumer that only speaks JSON performs three
+checks: schema major == 1, content hash verifies, decision matches the fail-closed
+derivation. [`examples/consume_decision.py`](../examples/consume_decision.py) is the
+**reference consumer — stdlib only, zero driftguard imports** — proving those checks in
+~50 lines, with CI-friendly exit codes (`0` promote · `78` hold_for_human · `1` block ·
+`2` invalid record). A test asserts the stdlib consumer and `parse_record` reach
+identical verdicts and reject identical tampering.
+
+```bash
+uv run python examples/consume_decision.py artifacts/promotion_decision.json
+```
+
+## Independence guarantees
+
+The contract is the *entire* coupling surface between producer and consumer:
+
+- **DriftGuard produces** records; it never calls a consumer, and it does not know or
+  care what executes the promotion.
+- **A consumer executes** (or refuses) production mutations; it needs only this
+  document and JSON — any language, no shared library, no shared deploy cadence.
+- Either side can version independently: minors are additive and ignorable; a major
+  bump is an explicit, deliberate breaking event both sides must opt into.

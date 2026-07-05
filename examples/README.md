@@ -64,3 +64,11 @@ dimensions rotate, the shift-specialised candidate increasingly **forgets** the 
 distribution (retention 0.993 → 0.606), and the `dual` gate flips to fail-closed — promoting a
 "perfectly recovered" model would wreck production. Recovery alone is not safety; the
 forgetting-aware gate is. Same `driftguard.governance`, imported unchanged.
+
+## Reference consumer (wire contract)
+
+[`consume_decision.py`](consume_decision.py) — the **stdlib-only** reference consumer for
+the [`PromotionDecisionRecord`](../docs/PROMOTION_DECISION.md) wire contract: zero
+driftguard imports, three checks (schema major, content hash, fail-closed derivation),
+CI-friendly exit codes. `make train` emits a real record to
+`artifacts/promotion_decision.json`; point this script at it.

@@ -16,14 +16,16 @@ fail-closed baseline gate on the holdout.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import sys
 from datetime import UTC, datetime
 
-from driftguard import drift, registry
+from driftguard import contract, drift, registry
 from driftguard.config import Settings, get_settings
 from driftguard.data import build_splits, load_split, write_splits
+from driftguard.governance import expected_calibration_error
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("driftguard.train")
@@ -68,6 +70,53 @@ def _demo_samples(settings: Settings, test_texts: list[str]) -> None:
     semantic = [" ".join(rng.choice(_FOREIGN_VOCAB) for _ in range(len(t.split()) or 1))
                 for t in sample]
     _write_json(settings.artifacts_dir / "current_semantic_shift.json", semantic)
+
+
+def emit_decision_record(settings: Settings, gate, base_m: dict, prim_m: dict,
+                         incumbent_f1: float | None, mlflow_info: dict,
+                         candidate, xte: list[str], yte: list[int]) -> str:
+    """Seal this training run's promotion decision as a PromotionDecisionRecord.
+
+    The incumbent gate is the required (deciding) gate — exactly the one the pipeline
+    enforces. Candidate slice scores and calibration ride along as *signals* (no
+    incumbent slice history exists at train time to gate against). ``human_required``
+    mirrors the pipeline's real behaviour: ``auto_promote`` means a passing candidate
+    is promoted by this run, so the record says ``promote``; the drift pipeline runs
+    with ``auto_promote`` off and the record says ``hold_for_human``.
+    """
+    slices = registry.evaluate_slices(candidate, xte, yte)
+    try:
+        conf, corr = registry.prediction_confidence(candidate, xte, yte)
+        candidate_ece = round(expected_calibration_error(conf, corr), 4)
+    except (AttributeError, TypeError):   # model without predict_proba
+        candidate_ece = None
+
+    def _digest(path) -> str:
+        return hashlib.sha256(path.read_bytes()).hexdigest() if path.exists() else ""
+
+    record = contract.build_record(
+        candidate={"kind": "trained_candidate", "algo": "tfidf(1,2)+logreg",
+                   "seed": settings.random_seed,
+                   "mlflow_version": mlflow_info.get("model_version", "n/a")},
+        incumbent={"kind": "prior_primary",
+                   "macro_f1_fixed": incumbent_f1 if incumbent_f1 is not None else "none"},
+        baseline={"kind": "committed_baseline", "macro_f1_fixed": base_m["macro_f1"]},
+        gates=[contract.GateOutcome(
+            "incumbent_gate", gate.passed, True, gate.reason,
+            {"margin": settings.promotion_margin})],
+        signals={"candidate_holdout": prim_m,
+                 "candidate_slices_fixed": {k: round(v, 4) for k, v in slices.items()},
+                 "candidate_ece_fixed": candidate_ece},
+        evidence={"metrics_json_sha256": _digest(settings.metrics_path),
+                  "baseline_metrics_json_sha256": _digest(settings.baseline_metrics_path),
+                  "mlflow_run": mlflow_info.get("run_id", "n/a")},
+        human_required=not settings.auto_promote,
+    )
+    out = settings.artifacts_dir / "promotion_decision.json"
+    out.write_text(contract.to_json(record))
+    log.info("PromotionDecisionRecord v%s sealed: decision=%s -> %s",
+             record.schema_version, record.decision, out)
+    return record.decision
 
 
 def _deployment_report(settings: Settings, base_m, prim_m, gate, mlflow_info) -> None:
@@ -174,6 +223,9 @@ def main() -> int:
         log.error("Baseline gate FAILED — primary NOT promoted. Service keeps prior primary.")
 
     _deployment_report(settings, base_m, prim_m, gate, mlflow_info)
+    if settings.emit_decision_record:
+        emit_decision_record(settings, gate, base_m, prim_m, incumbent_f1,
+                             mlflow_info, primary, Xte, yte)
 
     if not gate.passed:
         return 1  # fail closed for CI

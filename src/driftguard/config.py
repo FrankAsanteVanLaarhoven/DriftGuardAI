@@ -63,6 +63,10 @@ class Settings(BaseSettings):
 
     # Promotion / baseline gate
     promotion_margin: float = 0.0  # candidate macro-F1 must beat baseline by >= this
+    # Seal every training-pipeline promotion decision as a versioned, tamper-evident
+    # PromotionDecisionRecord (artifacts/promotion_decision.json). Additive artifact;
+    # disable via DRIFTGUARD_EMIT_DECISION_RECORD=false.
+    emit_decision_record: bool = True
     # `make train` promotes a passing candidate automatically. The drift pipeline
     # turns this off so promotion waits behind the human gate.
     auto_promote: bool = True

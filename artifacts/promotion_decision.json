@@ -1,0 +1,60 @@
+{
+  "schema_version": "1.0.0",
+  "decision_id": "f1380718-835b-4e28-bd31-d5dec0072d33",
+  "decided_at": "2026-07-05T04:17:48Z",
+  "decision": "promote",
+  "candidate": {
+    "kind": "trained_candidate",
+    "algo": "tfidf(1,2)+logreg",
+    "seed": 42,
+    "mlflow_version": 6
+  },
+  "incumbent": {
+    "kind": "prior_primary",
+    "macro_f1_fixed": 0.919729523867007
+  },
+  "baseline": {
+    "kind": "committed_baseline",
+    "macro_f1_fixed": 0.8955821800296329
+  },
+  "gates": [
+    {
+      "name": "incumbent_gate",
+      "passed": true,
+      "required": true,
+      "reason": "candidate macro-F1 0.9197 >= max(baseline 0.8956, incumbent 0.9197) + margin 0.0000 (= 0.9197; bar set by incumbent primary)",
+      "params": {
+        "margin": 0.0
+      }
+    }
+  ],
+  "signals": {
+    "candidate_holdout": {
+      "accuracy": 0.9198684210526316,
+      "macro_f1": 0.919729523867007
+    },
+    "candidate_slices_fixed": {
+      "World": 0.9205,
+      "Sports": 0.9693,
+      "Business": 0.8896,
+      "Sci/Tech": 0.8996
+    },
+    "candidate_ece_fixed": 0.0187
+  },
+  "policy": {
+    "required_gates": [
+      "incumbent_gate"
+    ],
+    "human_required": false
+  },
+  "evidence": {
+    "metrics_json_sha256": "1bca92436c5ebab4f34b2f1f3d990433f2c2e4e6d0326df6e3a2ce797e21b774",
+    "baseline_metrics_json_sha256": "f959285a0245a88e9dcfc887e6f02cce6f18451379fd40424fc07bc0e822daaf",
+    "mlflow_run": "092b95199b9b41beace6142425e08d59"
+  },
+  "framework": {
+    "name": "driftguard",
+    "version": "0.1.0"
+  },
+  "content_hash": "e39b5d7655f6f04519417c8edde6b4bdcc64d6f658166ca9af84a17e3a7ecc53"
+}
